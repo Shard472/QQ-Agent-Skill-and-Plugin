@@ -1,6 +1,3 @@
-<div align="center">
-
-<img src="docs/banner.png" alt="QQ Agent 插件集" width="100%">
 
 # QQ Agent 插件集
 
