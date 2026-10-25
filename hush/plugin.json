@@ -1,0 +1,75 @@
+{
+  "id": "hush",
+  "name": "嘘 ——（群静音指令）",
+  "version": "2.0.0",
+  "apiVersion": 1,
+  "description": "主人 @ 机器人发静音指令：可指定时长与档位（只回艾特 / 完全不说话 / 睡觉 / 只回一句礼貌话）。静音期间会记账（来了多少条、被点名几次），解除时让她用自己的口气汇报。纯插件，不改核心。",
+  "author": "local",
+  "category": "utility",
+  "enabledByDefault": true,
+  "capabilities": [],
+  "settings": {
+    "enabled": true,
+    "ownerQq": "2421954183",
+    "quietCommand": "/静音",
+    "resumeCommand": "/说话",
+    "defaultMode": "atOnly",
+    "defaultMinutes": 30,
+    "maxMinutes": 720,
+    "politeCooldownMin": 10,
+    "stateFile": ""
+  },
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "label": "启用「嘘——」",
+      "description": "总开关。关掉后指令不再生效，已经静音的群到点自然恢复。"
+    },
+    "ownerQq": {
+      "type": "string",
+      "label": "主人 QQ",
+      "description": "只有这个 QQ 号发的指令才算数。留空则回落到「主人识别」插件里的号码。"
+    },
+    "quietCommand": {
+      "type": "string",
+      "label": "静音指令",
+      "description": "格式：/静音 [完全|睡觉|礼貌] <时长>。时长支持 30 / 90秒 / 2小时 / 半小时，写 0 = 一直静音到手动解除。"
+    },
+    "resumeCommand": {
+      "type": "string",
+      "label": "恢复指令",
+      "description": "解除静音；解除时会把静音期间的记账汇报给她，让她用自己的口气说一句。"
+    },
+    "defaultMode": {
+      "type": "select",
+      "options": [
+        { "value": "atOnly", "label": "只回艾特（默认）" },
+        { "value": "silent", "label": "完全不说话" },
+        { "value": "sleep", "label": "睡觉（完全不说，醒来会问谁找过）" },
+        { "value": "polite", "label": "只回一句礼貌话" }
+      ],
+      "label": "默认档位",
+      "description": "指令里不写档位时用这个"
+    },
+    "politeCooldownMin": {
+      "type": "number",
+      "label": "礼貌档冷却（分钟）",
+      "description": "礼貌档下每 N 分钟最多回一句，避免刷屏。默认 10。"
+    },
+    "defaultMinutes": {
+      "type": "number",
+      "label": "默认静音时长（分钟）",
+      "description": "只说「/静音」不带数字时用这个。默认 30。"
+    },
+    "maxMinutes": {
+      "type": "number",
+      "label": "最长静音时长（分钟）",
+      "description": "防止手滑输入 9999。默认 720（12 小时）。"
+    },
+    "stateFile": {
+      "type": "string",
+      "label": "状态文件",
+      "description": "留空 = data/hush-state.json（存静音状态、档位和记账数据）"
+    }
+  }
+}
