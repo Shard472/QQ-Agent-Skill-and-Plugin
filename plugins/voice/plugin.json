@@ -1,0 +1,59 @@
+{
+  "id": "voice",
+  "name": "鲸语（语音条）",
+  "version": "1.2.0",
+  "apiVersion": 1,
+  "description": "本地 GPT-SoVITS 合成语音，发成 QQ 语音条。格式：@她 语音 中文/日语 内容；中日两套微调音色按语言自动切换，中文台词说日语时自动翻译。",
+  "author": "local",
+  "category": "utility",
+  "enabledByDefault": true,
+  "capabilities": [],
+  "settings": {
+    "enabled": true,
+    "ttsBaseUrl": "http://127.0.0.1:9880",
+    "gptSovitsDir": "D:\\GPT-SoVITS",
+    "pythonExe": "D:\\GPT-SoVITS\\python310\\python.exe",
+    "apiScript": "api_v2.py",
+    "autoStart": true,
+    "keyword": "语音",
+    "command": "/语音",
+    "lang": "zh",
+    "defaultVoices": { "zh": "艾丽妮-中", "ja": "艾丽妮-日" },
+    "defaultVoice": "",
+    "voices": [],
+    "maxSeconds": 20,
+    "maxChunks": 2,
+    "cooldownSeconds": 60,
+    "dailyCap": 20
+  },
+  "configSchema": {
+    "enabled": { "type": "boolean", "label": "启用「鲸语」", "description": "总开关。关掉后语音指令失效、send_voice 工具不注册。" },
+    "keyword": { "type": "string", "label": "触发关键词", "description": "默认「语音」。完整格式：@她 语音 中文/日语 内容" },
+    "lang": {
+      "type": "select",
+      "options": [
+        { "value": "zh", "label": "中文" },
+        { "value": "ja", "label": "日文" }
+      ],
+      "label": "默认语言",
+      "description": "指令里没写「中文/日语」时用这个"
+    },
+    "command": { "type": "string", "label": "旧版斜杠指令（后备）", "description": "后备格式：/语音 [ja|中文] 内容" },
+    "defaultVoices": { "type": "object", "label": "各语言默认音色", "description": "形如 {\"zh\":\"艾丽妮-中\",\"ja\":\"艾丽妮-日\"}" },
+    "ttsBaseUrl": { "type": "string", "label": "TTS 服务地址", "description": "默认 http://127.0.0.1:9880" },
+    "gptSovitsDir": { "type": "string", "label": "GPT-SoVITS 目录", "description": "参考音频在它的 ref/ 子目录下" },
+    "pythonExe": { "type": "string", "label": "Python 路径", "description": "用于自动拉起 api_v2.py" },
+    "apiScript": { "type": "string", "label": "api 脚本名", "description": "默认 api_v2.py" },
+    "autoStart": { "type": "boolean", "label": "自动拉起 TTS 服务", "description": "检测到 9880 没起就后台启动（约 10 秒）" },
+    "defaultVoice": { "type": "string", "label": "兜底音色", "description": "按语言都挑不到时最后用这个" },
+    "voices": {
+      "type": "array",
+      "label": "音色列表",
+      "description": "每项：name 音色名 / lang 语言(zh|ja) / file 参考音频 / promptText 参考原话 / promptLang 参考语言 / weights 微调模型 / speed 语速 / temperature 采样温度 / topK / splitMethod 切句方式"
+    },
+    "maxSeconds": { "type": "number", "label": "单条最长秒数", "description": "默认 20 秒，超了按句切分" },
+    "maxChunks": { "type": "number", "label": "最多切几条", "description": "默认 2 条" },
+    "cooldownSeconds": { "type": "number", "label": "同会话冷却（秒）", "description": "默认 60 秒，防刷屏" },
+    "dailyCap": { "type": "number", "label": "每天上限", "description": "每个会话每天最多几条语音，默认 20" }
+  }
+}
