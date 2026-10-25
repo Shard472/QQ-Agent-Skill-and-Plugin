@@ -1,0 +1,189 @@
+{
+  "id": "comfy-draw",
+  "name": "画舫（ComfyUI 画图）",
+  "version": "0.2.0",
+  "apiVersion": 1,
+  "description": "接本地 ComfyUI 让她会画画。中文描述自动翻成 Danbooru 标签；5 套预设（鲸鱼娘/头像/立绘/表情包/场景）；姿势骨骼自动识别（7 套 OpenPose 骨架）；先停 TTS 再画、画完自动关 ComfyUI；支持 /画 指令与自然语言触发。纯插件，不改核心。",
+  "author": "local",
+  "category": "media",
+  "enabledByDefault": false,
+  "capabilities": [],
+  "settings": {
+    "enabled": true,
+    "comfyUrl": "http://127.0.0.1:8188",
+    "modelSd15": "kohaku-v2.1.safetensors",
+    "modelSdxl": "animagine-xl-4.0.safetensors",
+    "vaeSdxl": "sdxl-vae-fp16-fix.safetensors",
+    "upscaler": "4x-AnimeSharp.pth",
+    "command": "/画",
+    "allowGroups": true,
+    "cooldownSeconds": 60,
+    "dailyCap": 10,
+    "timeoutSeconds": 300,
+    "defaultUpscale": 1,
+    "autoStopVoice": true,
+    "ttsPort": 9880,
+    "gptSovitsDir": "D:\\GPT-SoVITS",
+    "pythonExe": "D:\\GPT-SoVITS\\python310\\python.exe",
+    "ttsConfig": "GPT_SoVITS/configs/tts_infer_zh.yaml",
+    "qualityPrefix": "masterpiece, best quality, very aesthetic, absurdres",
+    "negative": "",
+    "presets": {},
+    "stopComfyAfterDraw": true,
+    "stopComfyDelayMs": 20000,
+    "restartVoiceAfterDraw": false,
+    "allowNatural": true,
+    "comfyDir": "",
+    "comfyPython": "",
+    "comfyYaml": "",
+    "comfyInputDir": "",
+    "comfyOutputDir": ""
+  },
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "label": "启用「画舫」",
+      "description": "总开关。关掉后 /画 指令和 comfy_draw 工具都失效。"
+    },
+    "comfyUrl": {
+      "type": "string",
+      "label": "ComfyUI 地址",
+      "description": "默认 http://127.0.0.1:8188"
+    },
+    "modelSd15": {
+      "type": "string",
+      "label": "SD1.5 模型文件名",
+      "description": "鲸鱼娘/表情包用这个，快"
+    },
+    "modelSdxl": {
+      "type": "string",
+      "label": "SDXL 模型文件名",
+      "description": "头像/立绘/场景用它，质量高"
+    },
+    "vaeSdxl": {
+      "type": "string",
+      "label": "SDXL VAE 文件名",
+      "description": "建议 sdxl-vae-fp16-fix，防糊防黑图"
+    },
+    "upscaler": {
+      "type": "string",
+      "label": "放大模型",
+      "description": "默认 4x-AnimeSharp.pth（二次元线条更干净）；也可 4x-UltraSharp.pth（更锐利、更快）"
+    },
+    "command": {
+      "type": "string",
+      "label": "画图指令",
+      "description": "默认 /画。用法：/画 <描述> [--预设 名字] [--放大 2] [--种子 123]"
+    },
+    "allowGroups": {
+      "type": "boolean",
+      "label": "允许群聊画图",
+      "description": "打开后群里 @她 才能触发；关掉则只在私聊响应。"
+    },
+    "cooldownSeconds": {
+      "type": "number",
+      "label": "冷却（秒）",
+      "description": "同一会话两次画图的最小间隔，默认 60"
+    },
+    "dailyCap": {
+      "type": "number",
+      "label": "每日上限",
+      "description": "每个会话每天最多画几张，默认 10"
+    },
+    "timeoutSeconds": {
+      "type": "number",
+      "label": "出图超时（秒）",
+      "description": "默认 300；高分辨率 + ControlNet 可能 100 秒以上"
+    },
+    "defaultUpscale": {
+      "type": "number",
+      "label": "默认放大倍数",
+      "description": "1=不额外放大（预设自带二段放大）；2=再用 4x 模型放大到 2 倍。"
+    },
+    "autoStopVoice": {
+      "type": "boolean",
+      "label": "画图时暂停语音",
+      "description": "8GB 显卡建议开：TTS 占 2.5GB，同跑容易崩驱动。画完自动拉起。"
+    },
+    "ttsPort": {
+      "type": "number",
+      "label": "TTS 端口",
+      "description": "默认 9880，配合「画图时暂停语音」使用"
+    },
+    "gptSovitsDir": {
+      "type": "string",
+      "label": "GPT-SoVITS 目录",
+      "description": "画完重启 TTS 时用"
+    },
+    "pythonExe": {
+      "type": "string",
+      "label": "Python 路径",
+      "description": "同上"
+    },
+    "ttsConfig": {
+      "type": "string",
+      "label": "重启 TTS 用的配置",
+      "description": "默认中文配置；留空则用默认 tts_infer.yaml"
+    },
+    "qualityPrefix": {
+      "type": "string",
+      "label": "质量词前缀",
+      "description": "自动加在每个提示词前面"
+    },
+    "negative": {
+      "type": "string",
+      "label": "默认负向词",
+      "description": "留空则用内置默认（已含解剖/服装/多头等修正）"
+    },
+    "presets": {
+      "type": "object",
+      "label": "自定义预设",
+      "description": "内置 5 套：鲸鱼娘(896x1152,SD1.5,FreeU) / 头像(1024x1024,SDXL) / 立绘(832x1216,SDXL) / 表情包(512x512,SD1.5) / 场景(1216x832,SDXL)。同名字段会覆盖内置值。"
+    },
+    "stopComfyAfterDraw": {
+      "type": "boolean",
+      "label": "画完关闭 ComfyUI",
+      "description": "常态不占显存：出图后等一小会儿把 ComfyUI 关掉，下次画图自动拉起（约 25 秒）。"
+    },
+    "stopComfyDelayMs": {
+      "type": "number",
+      "label": "关停延时（毫秒）",
+      "description": "默认 20000；宽限期内又有人要画就不关。"
+    },
+    "restartVoiceAfterDraw": {
+      "type": "boolean",
+      "label": "画完自动重启语音",
+      "description": "默认关。8GB 卡上 TTS 与画图互斥，画完不急着拉起，等下次用语音再说。"
+    },
+    "allowNatural": {
+      "type": "boolean",
+      "label": "自然语言触发",
+      "description": "打开后「画一张…」「帮我画个…」「来张图…」不用打 /画 也能出图。"
+    },
+    "comfyDir": {
+      "type": "string",
+      "label": "ComfyUI 目录",
+      "description": "ComfyUI 主目录（含 main.py）。填了之后，画图时 ComfyUI 没在跑会自动拉起；留空则只连已在运行的实例。"
+    },
+    "comfyPython": {
+      "type": "string",
+      "label": "ComfyUI 的 Python",
+      "description": "ComfyUI 那个 venv 里的 python.exe，例如 <ComfyUI>/.venv/Scripts/python.exe"
+    },
+    "comfyYaml": {
+      "type": "string",
+      "label": "模型路径配置（可选）",
+      "description": "ComfyUI 桌面版的 --extra-model-paths-config 文件；模型放在别处时需要，留空则不加这个参数。"
+    },
+    "comfyInputDir": {
+      "type": "string",
+      "label": "输入目录（可选）",
+      "description": "骨骼图放在这里。留空则用 ComfyUI 自己的 input/。"
+    },
+    "comfyOutputDir": {
+      "type": "string",
+      "label": "输出目录（可选）",
+      "description": "留空则用 ComfyUI 自己的 output/。"
+    }
+  }
+}
