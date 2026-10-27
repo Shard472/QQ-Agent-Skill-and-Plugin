@@ -3,7 +3,7 @@
   "name": "画舫（ComfyUI 画图）",
   "version": "0.4.3",
   "apiVersion": 1,
-  "description": "接本地 ComfyUI 让她会画画。中文描述自动翻成 Danbooru 标签（带服装词典）；6 套预设（鲸鱼娘Anima / 鲸鱼娘 / 头像 / 立绘 / 表情包 / 场景）；Anima 是 DiT 架构（2B），走 UNETLoader+CLIPLoader+VAELoader，少女纤细配方，单张约 60 秒；SD1.5 快路径仍在（15~45 秒）；画前停 TTS、画完关 ComfyUI。纯插件，不改核心。",
+  "description": "接本地 ComfyUI 让她会画画。中文描述自动翻 Danbooru 标签（服装词走本地词典硬替换）；7 套预设：鲸鱼娘Anima（默认，18 岁少女感）/ 鲸鱼娘成年 / 鲸鱼娘（SD1.5 快档）/ 头像 / 立绘 / 表情包 / 场景；Anima 是 DiT 架构（2B），走 UNETLoader+CLIPLoader+VAELoader，约 55 秒一张；SD1.5 快路径仍在（9~45 秒）；画前停 TTS、CUDA 崩了自动重启重试、Anima 失败自动退回 SD1.5。纯插件，不改核心。",
   "author": "local",
   "category": "media",
   "enabledByDefault": false,
@@ -139,7 +139,7 @@
     "presets": {
       "type": "object",
       "label": "自定义预设",
-      "description": "内置 5 套：鲸鱼娘(896x1152,SD1.5,FreeU) / 头像(1024x1024,SDXL) / 立绘(832x1216,SDXL) / 表情包(512x512,SD1.5) / 场景(1216x832,SDXL)。同名字段会覆盖内置值。"
+      "description": "同名键覆盖内置预设。内置 7 套：鲸鱼娘Anima(832x1216,Anima) / 鲸鱼娘成年(832x1216,Anima) / 鲸鱼娘(768x1024,SD1.5) / 头像(1024x1024,SDXL) / 立绘(832x1216,SDXL) / 表情包(512x512,SD1.5) / 场景(1216x832,SDXL)。"
     },
     "stopComfyAfterDraw": {
       "type": "boolean",
@@ -189,7 +189,7 @@
     "defaultPreset": {
       "type": "string",
       "label": "默认预设",
-      "description": "群友没说用哪个时用这个。默认 鲸鱼娘Anima（少女感，约 55 秒）。想成年比例就填 鲸鱼娘成年；要快就填 鲸鱼娘（SD1.5，约 45 秒）。"
+      "description": "群友没说用哪个、也没提到别的题材时用这一档。默认 鲸鱼娘Anima（18 岁少女感，约 55 秒）。想要成年比例就填 鲸鱼娘成年；要快就填 鲸鱼娘（SD1.5，约 45 秒）。"
     }
   }
 }
