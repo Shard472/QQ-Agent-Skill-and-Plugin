@@ -23,8 +23,8 @@
     "defaultUpscale": 1,
     "autoStopVoice": true,
     "ttsPort": 9880,
-    "gptSovitsDir": "",
-    "pythonExe": "",
+    "gptSovitsDir": "D:\\GPT-SoVITS",
+    "pythonExe": "D:\\GPT-SoVITS\\python310\\python.exe",
     "ttsConfig": "GPT_SoVITS/configs/tts_infer_zh.yaml",
     "qualityPrefix": "masterpiece, best quality, very aesthetic, absurdres",
     "negative": "",
@@ -38,7 +38,12 @@
     "animaVae": "qwen_image_vae.safetensors",
     "animaDailyCap": 5,
     "animaCooldownSeconds": 120,
-    "defaultPreset": "鲸鱼娘Anima"
+    "defaultPreset": "鲸鱼娘Anima",
+    "comfyDir": "",
+    "comfyPython": "",
+    "comfyYaml": "",
+    "comfyInputDir": "",
+    "comfyOutputDir": ""
   },
   "configSchema": {
     "enabled": {
@@ -190,6 +195,31 @@
       "type": "string",
       "label": "默认预设",
       "description": "群友没说用哪个、也没提到别的题材时用这一档。默认 鲸鱼娘Anima（18 岁少女感，约 55 秒）。想要成年比例就填 鲸鱼娘成年；要快就填 鲸鱼娘（SD1.5，约 45 秒）。"
+    },
+    "comfyDir": {
+      "type": "string",
+      "label": "ComfyUI 目录（自动拉起用）",
+      "description": "含 main.py 的那个目录，例如 E:\\ComfyUI\\ComfyUI。只在「ComfyUI 没在跑、想让它自动启动」时需要；留空就只能连已经开着的 ComfyUI。"
+    },
+    "comfyPython": {
+      "type": "string",
+      "label": "ComfyUI 的 Python",
+      "description": "上面那个目录所在 venv 里的 python.exe，例如 E:\\ComfyUI\\python_embeded\\python.exe。和上一项配套填写。"
+    },
+    "comfyYaml": {
+      "type": "string",
+      "label": "模型路径配置（可选）",
+      "description": "ComfyUI 桌面版用 --extra-model-paths-config 指定模型目录时，把那个 yaml 路径填这里；便携版一般留空。"
+    },
+    "comfyInputDir": {
+      "type": "string",
+      "label": "输入目录（可选）",
+      "description": "骨骼图 pose-*.png 放在哪。填了会以 --input-directory 传给 ComfyUI；留空用默认 input/。"
+    },
+    "comfyOutputDir": {
+      "type": "string",
+      "label": "输出目录（可选）",
+      "description": "出图落在哪。填了会以 --output-directory 传给 ComfyUI；留空用默认 output/。"
     }
   }
 }
