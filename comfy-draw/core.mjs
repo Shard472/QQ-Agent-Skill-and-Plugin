@@ -52,6 +52,38 @@ export const DEFAULT_PRESETS = {
     controlnet: { file: 'control_v11p_sd15_openpose.pth', pose: 'pose-stand.png', strength: 0.95 },
     loras: [{ name: 'whalegirl', weight: 0.85 }]
   },
+  // Anima 架构（DiT 2B）：走 UNETLoader + CLIPLoader + VAELoader，不是 checkpoint
+  // 实测 832x1216 / 30 步 / CFG 4 / euler+simple：单张 55~58 秒，显存约 5.5GB
+  // 成年比例版（2026-10-26 加）：同一套 Anima + LoRA，只把体型词换成成年，
+  // 负向里**不再**压 mature/curvy —— 那是少女版才需要的。
+  '鲸鱼娘成年': {
+    family: 'anima',
+    model: 'anima', width: 832, height: 1216, steps: 30, cfg: 4,
+    sampler: 'euler', scheduler: 'simple',
+    qualityPrefix: 'detailed, high quality, anime illustration',
+    extraTags: 'mature female, adult woman, tall, long legs, 7head, realistic proportions, ' +
+      'slender waist, full body, standing, simple background',
+    negative: 'worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia, ' +
+      'chibi, kid, child, loli, small body, oversized head, super deformed, ' +
+      'extra limbs, extra legs, two heads, duplicate head, bad proportions',
+    loras: [{ file: 'ds_whalemaid_comfy.safetensors', weight: 0.95, trigger: 'ds_whalemaid' }]
+  },
+  '鲸鱼娘Anima': {
+    family: 'anima',
+    model: 'anima', width: 832, height: 1216, steps: 30, cfg: 4,
+    sampler: 'euler', scheduler: 'simple',
+    qualityPrefix: 'detailed, high quality, anime illustration',
+    // 少女感 + 纤细身材（2026-10-26 与"成年/骨感"三版对比后定的配方）
+    // 2026-10-26 二次修订：改成"18 岁少女感"——保留纤细清新的气质，
+    // 但去掉 teenage / petite / flat chest 这类容易被读成未成年的写法。
+    extraTags: '1girl, solo, young woman, 18 years old, youthful, slim, slender, small bust, ' +
+      'natural proportions, fresh look, gentle expression, full body, standing, simple background',
+    negative: 'worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia, ' +
+      'chibi, kid, child, loli, small body, oversized head, super deformed, ' +
+      'extra limbs, extra legs, two heads, duplicate head, 2girls, multiple girls, ' +
+      'large breasts, huge breasts, muscular, plump',
+    loras: [{ file: 'ds_whalemaid_comfy.safetensors', weight: 0.95, trigger: 'ds_whalemaid' }]
+  },
   '场景': {
     model: 'sdxl', width: 1216, height: 832, steps: 28, cfg: 5.5, sampler: 'euler_ancestral',
     extraTags: 'scenery, wide shot, detailed background',
@@ -164,14 +196,16 @@ export function matchPose(text) {
 }
 
 const PRESET_HINTS = [
-  { name: '鲸鱼娘', words: ['鲸鱼娘', '鲸娘', '小鲸', 'whale girl', 'whalegirl'] },
+  // 2026-10-26：说到鲸鱼娘就走 Anima 那档（同角色，画风更好）；要旧的 SD1.5 版显式传 --预设 鲸鱼娘
+  // 2026-10-26：默认回到少女版（观感更好）；要成年比例就显式 --预设 鲸鱼娘成年
+  { name: '鲸鱼娘Anima', words: ['鲸鱼娘', '鲸娘', '小鲸', 'whale girl', 'whalegirl', 'anima'] },
   { name: '表情包', words: ['表情', '贴纸', '梗图', 'q版', 'chibi', 'sticker'] },
   { name: '头像', words: ['头像', '头图', '自拍', '特写', 'portrait', 'avatar'] },
   { name: '场景', words: ['场景', '背景', '风景', '横图', '壁纸', 'scenery', 'landscape'] },
   { name: '立绘', words: ['立绘', '全身', '站姿', 'full body'] }
 ];
 
-export function pickPreset(text, wanted, presets) {
+export function pickPreset(text, wanted, presets, fallbackName = '') {
   const list = { ...DEFAULT_PRESETS, ...(presets || {}) };
   if (wanted && list[wanted]) return { name: wanted, preset: list[wanted], why: 'explicit' };
   const t = String(text || '').toLowerCase();
@@ -181,7 +215,9 @@ export function pickPreset(text, wanted, presets) {
       return { name: h.name, preset: list[h.name], why: 'keyword' };
     }
   }
-  return { name: '立绘', preset: list['立绘'], why: 'default' };
+  // 没指定、关键词也没命中时用哪个：cfg.defaultPreset（插件默认设成 Anima 那档）
+  const fallback = (fallbackName && list[fallbackName]) ? fallbackName : '立绘';
+  return { name: fallback, preset: list[fallback], why: 'default' };
 }
 
 /** 把 {name,weight} 形式的 LoRA 引用解析成真实文件。 */
@@ -205,6 +241,49 @@ export function resolveLoras(list, loraTable = DEFAULT_LORAS) {
  * - upscale > 1：同图内接 4x 模型，再缩到 width*upscale × height*upscale
  * - speed='lightning'：4 步 / cfg 1.6 / dpmpp_sde + sgm_uniform
  */
+/**
+ * Anima（DiT）文生图工作流。
+ * 与 SD 的区别：没有 checkpoint，要分别加载 UNET / CLIP(qwen3-0.6b) / VAE(qwen-image)；
+ * 采样器 euler + simple、CFG 很低（4）；LoRA 只作用于模型（LoraLoaderModelOnly）。
+ */
+export function buildAnima({
+  unet, clip, vae, prompt, negative, width = 832, height = 1216,
+  steps = 30, cfg = 4, sampler = 'euler', scheduler = 'simple', seed = 0,
+  loras = [], prefix = 'comfy-anima'
+}) {
+  const wf = {
+    1: { class_type: 'UNETLoader', inputs: { unet_name: unet, weight_dtype: 'default' } },
+    2: { class_type: 'CLIPLoader', inputs: { clip_name: clip, type: 'stable_diffusion', device: 'default' } },
+    3: { class_type: 'VAELoader', inputs: { vae_name: vae } },
+    4: { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['2', 0] } },
+    5: { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['2', 0] } },
+    6: { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } }
+  };
+
+  let modelOut = ['1', 0];
+  let nodeId = 100;
+  for (const l of loras) {
+    const id = String(nodeId);
+    wf[id] = {
+      class_type: 'LoraLoaderModelOnly',
+      inputs: { lora_name: l.file, strength_model: Number(l.weight) || 1, model: modelOut }
+    };
+    modelOut = [id, 0];
+    nodeId += 1;
+  }
+
+  wf[7] = {
+    class_type: 'KSampler',
+    inputs: {
+      seed, steps, cfg, sampler_name: sampler, scheduler, denoise: 1,
+      model: modelOut, positive: ['4', 0], negative: ['5', 0], latent_image: ['6', 0]
+    }
+  };
+  wf[8] = { class_type: 'VAEDecode', inputs: { samples: ['7', 0], vae: ['3', 0] } };
+  wf[9] = { class_type: 'SaveImage', inputs: { images: ['8', 0], filename_prefix: prefix } };
+  return wf;
+}
+
 export function buildTxt2Img({
   ckpt, prompt, negative, width, height, steps, cfg, sampler, seed, vae,
   loras = [], upscale = 1, upscaler = '4x-AnimeSharp.pth', prefix = 'comfy-draw',
@@ -456,17 +535,24 @@ export async function ensureComfy(cfg, { waitMs = 120000, pollMs = 3000 } = {}) 
     return { ok: false, started: false, why: `写启动脚本失败：${e?.message ?? e}` };
   }
 
+  // 优先用**单行命令**启动（2026-10-26 实测：批处理那条路在本机静默失败，
+  //   cmd /c xxx.bat 立刻退出、ComfyUI 根本没起来，日志还是空的；
+  //   而 cmd /c cd /d ... && python ... 这种单行写法每次都成功）
+  const oneLiner = `cd /d "${s.dir}" && "${s.python}" ${argLine}`
+    + (logFile ? ` >> "${logFile}" 2>&1` : '');
+  // ① `cmd /c start "" /b <python> <args>` + spawn 的 cwd：不拼长命令、不依赖 .bat，最不容易被引号坑
+  // ② 单行 `cd /d ... && python ...`（本机实测可用的写法）
+  // ③ 落盘的 .bat（最早的做法，本机 2026-10-26 实测静默失败，留作兜底）
   const attempts = [
-    // 1) 直接跑批处理
-    ['cmd.exe', ['/c', batPath]],
-    // 2) 用 start 再兜一层（有些环境不允许直接继承控制台）
-    ['cmd.exe', ['/c', 'start', '', '/b', batPath]]
+    ['cmd.exe', ['/c', 'start', '', '/b', String(s.python), ...args.map(String)], { cwd: String(s.dir) }],
+    ['cmd.exe', ['/c', oneLiner], {}],
+    ['cmd.exe', ['/c', batPath], {}]
   ];
   let spawnErr = '';
   let launched = false;
-  for (const [file, argv] of attempts) {
+  for (const [file, argv, extra] of attempts) {
     try {
-      const child = spawn(file, argv, { detached: true, stdio: 'ignore', windowsHide: true });
+      const child = spawn(file, argv, { ...(extra || {}), detached: true, stdio: 'ignore', windowsHide: true });
       child.unref();
       launched = true;
       break;
@@ -484,7 +570,11 @@ export async function ensureComfy(cfg, { waitMs = 120000, pollMs = 3000 } = {}) 
     const st = await status(url);
     if (st.ok) return { ok: true, started: true, status: st };
   }
-  return { ok: false, started: true, why: `ComfyUI 已尝试启动，但 ${Math.round(waitMs / 1000)} 秒内没就绪` };
+  return {
+    ok: false, started: true,
+    why: `ComfyUI 已尝试启动，但 ${Math.round(waitMs / 1000)} 秒内没就绪（本机自动拉起实测不生效）`,
+    hint: `手动启动：cd /d "${s.dir}" && "${s.python}" -s main.py --port ${port} --listen 127.0.0.1 --reserve-vram ${s.reserveVram ?? 0.5}`
+  };
 }
 
 /** 从 /object_info 读 COMBO 选项（兼容两种 schema）。 */
@@ -610,12 +700,14 @@ export async function draw(cfg, opt = {}) {
   const modelsCfg = s.models || {};
   const presets = { ...DEFAULT_PRESETS, ...(s.presets || {}) };
   const loraTable = { ...DEFAULT_LORAS, ...(s.loras || {}) };
-  const picked = pickPreset(opt.prompt || '', opt.preset, presets);
+  const picked = pickPreset(opt.prompt || '', opt.preset, presets, s.defaultPreset || '');
   const preset = picked.preset;
 
   // LoRA 来源三处：显式传入 > 预设自带 > 角色关键词匹配（默认合并）
   const charTable = { ...DEFAULT_CHARACTER_LORAS, ...(s.characterLoras || {}) };
-  const charHits = opt.noCharacterLoras ? [] : matchCharacterLoras(`${opt.prompt || ''} ${opt.tags || ''}`, charTable);
+  const isAnima = String(preset.family || '') === 'anima';
+  // Anima 预设不参与 SD 的角色 LoRA 表（那些是 SD1.5 LoRA，挂上去只会重演"840 个键全跳过"）
+  const charHits = (opt.noCharacterLoras || isAnima) ? [] : matchCharacterLoras(`${opt.prompt || ''} ${opt.tags || ''}`, charTable);
   const mergedRefs = [
     ...(Array.isArray(opt.loras) ? opt.loras : (preset.loras || [])),
     ...charHits
@@ -640,14 +732,19 @@ export async function draw(cfg, opt = {}) {
   const identityTags = charHits.map((c) => c.tags).filter(Boolean);
   const tagsRaw = String(opt.tags || opt.prompt || '').trim();
   const tags = [tagsRaw, ...identityTags, ...triggers].filter(Boolean).join(', ');
-  const quality = String(s.qualityPrefix ?? 'masterpiece, best quality, very aesthetic, absurdres').trim();
+  const quality = String(preset.qualityPrefix ?? s.qualityPrefix ?? 'masterpiece, best quality, very aesthetic, absurdres').trim();
   // 服装：用户没说服装 → 用预设默认；说了 → 让位
   const defaultOutfit = (!opt.noDefaultOutfit && preset.outfit && !hasOutfitCue(tagsRaw))
     ? String(preset.outfit).trim()
     : '';
   const extra = [String(preset.extraTags || '').trim(), defaultOutfit].filter(Boolean).join(', ');
   const prompt = [quality, tags, extra].filter(Boolean).join(', ');
-  const negative = String(opt.negative || preset.negative || s.negative || DEFAULT_NEGATIVE);
+  let negative = String(opt.negative || preset.negative || s.negative || DEFAULT_NEGATIVE);
+  // Anima 那个 LoRA 训练集几乎全是女仆装，写和服/校服时会自己加围裙。
+  // 用户已经指定了别的服装时，把女仆相关词压掉（只在 anima 分支做，SD 预设有自己的 outfit 让位逻辑）。
+  if (isAnima && hasOutfitCue(tagsRaw) && !/\bmaid\b/i.test(tagsRaw)) {
+    negative += ', apron, maid, maid headdress, white apron, frilled apron';
+  }
 
   const isSdxl = String(preset.model || 'sdxl') === 'sdxl';
   const ckpt = isSdxl ? (modelsCfg.sdxl || 'animagine-xl-4.0.safetensors') : (modelsCfg.sd15 || 'kohaku-v2.1.safetensors');
@@ -655,7 +752,25 @@ export async function draw(cfg, opt = {}) {
   const seed = Number.isFinite(opt.seed) ? Number(opt.seed) : Math.floor(Math.random() * 2 ** 31);
   const upscale = Math.max(1, Number(opt.upscale) || 1);
 
-  const wf = buildTxt2Img({
+  let wf;
+  let modelLabel = ckpt;
+  if (isAnima) {
+    modelLabel = modelsCfg.animaUnet || 'anima-aesthetic-v1.1.safetensors';
+    wf = buildAnima({
+      unet: modelLabel,
+      clip: modelsCfg.animaClip || 'qwen_3_06b_base.safetensors',
+      vae: modelsCfg.animaVae || 'qwen_image_vae.safetensors',
+      prompt, negative,
+      width: Number(preset.width) || 832,
+      height: Number(preset.height) || 1216,
+      steps: Number(preset.steps) || 30,
+      cfg: Number(preset.cfg) || 4,
+      sampler: String(preset.sampler || 'euler'),
+      scheduler: String(preset.scheduler || 'simple'),
+      seed, loras, prefix: opt.prefix || 'comfy-anima'
+    });
+  } else {
+  wf = buildTxt2Img({
     ckpt, prompt, negative,
     width: Number(preset.width) || 832,
     height: Number(preset.height) || 1216,
@@ -680,20 +795,43 @@ export async function draw(cfg, opt = {}) {
     upscaler: modelsCfg.upscaler || '4x-AnimeSharp.pth',
     prefix: opt.prefix || 'comfy-draw'
   });
+  }
 
   let voiceWasUp = false;
   if (s.autoStopVoice !== false && s.tts && s.tts.port) {
     voiceWasUp = await ttsAlive(s.tts.port);
     if (voiceWasUp) {
       killTts(s.tts.port);
+      // 复检：2026-10-26 实测 TTS 没关干净时，Anima 会直接撞 CUDA error（unknown error），
+      // 白等一分钟还拿不到图。宁可立刻说清楚，也不要让群友干等。
       await new Promise((x) => setTimeout(x, 3000));
+      if (await ttsAlive(s.tts.port)) {
+        throw new Error(
+          `TTS 还占着显存（端口 ${s.tts.port} 没关掉），Anima 需要约 5.5GB，两个一起跑会 CUDA 崩。`
+          + '请手动关掉语音服务再画，或改用普通版。'
+        );
+      }
     }
   }
 
   const t0 = Date.now();
   let out;
+  const isCudaBoom = (msg) => /CUDA|Accelerator|out of memory|OutOfMemory|device-side/i.test(String(msg || ''));
   try {
-    out = await runWorkflow(s.comfyUrl, wf, { timeoutSeconds: Number(s.timeoutSeconds) || 300 });
+    try {
+      out = await runWorkflow(s.comfyUrl, wf, { timeoutSeconds: Number(s.timeoutSeconds) || 300 });
+    } catch (e) {
+      if (!isCudaBoom(e?.message)) throw e;
+      // CUDA 上下文坏了只能重启进程：关掉 ComfyUI → 重新拉起 → 同一份工作流再画一次
+      const port = Number((String(s.comfyUrl || '').match(/:(\d+)/) || [])[1]) || 8188;
+      try { stopComfy(port); } catch { /* ignore */ }
+      await new Promise((x) => setTimeout(x, 2500));
+      const re = await ensureComfy(s, { waitMs: 150000 });
+      if (!re.ok) {
+        throw new Error(`显存/CUDA 崩了，重启 ComfyUI 也没起来：${re.why || ''}`);
+      }
+      out = await runWorkflow(s.comfyUrl, wf, { timeoutSeconds: Number(s.timeoutSeconds) || 300 });
+    }
   } finally {
     // 画完是否自动拉起 TTS：8GB 卡上 TTS 启动即崩（fbgemm/c10），默认**不重启**，
     // 下次用 /语音 时 voice 插件会自己拉起来。
@@ -716,7 +854,7 @@ export async function draw(cfg, opt = {}) {
     preset: picked.name, presetWhy: picked.why,
     width: Math.round((Number(preset.width) || 832) * upscale),
     height: Math.round((Number(preset.height) || 1216) * upscale),
-    upscale, seed, model: ckpt,
+    upscale, seed, model: modelLabel,
     loras: loras.map((l) => `${l.file}@${l.weight}`),
     characters: charHits.map((c) => c.name),
     speed: speed || 'normal',

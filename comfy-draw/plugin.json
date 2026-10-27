@@ -1,9 +1,9 @@
 {
   "id": "comfy-draw",
   "name": "画舫（ComfyUI 画图）",
-  "version": "0.2.0",
+  "version": "0.4.3",
   "apiVersion": 1,
-  "description": "接本地 ComfyUI 让她会画画。中文描述自动翻成 Danbooru 标签；5 套预设（鲸鱼娘/头像/立绘/表情包/场景）；姿势骨骼自动识别（7 套 OpenPose 骨架）；先停 TTS 再画、画完自动关 ComfyUI；支持 /画 指令与自然语言触发。纯插件，不改核心。",
+  "description": "接本地 ComfyUI 让她会画画。中文描述自动翻成 Danbooru 标签（带服装词典）；6 套预设（鲸鱼娘Anima / 鲸鱼娘 / 头像 / 立绘 / 表情包 / 场景）；Anima 是 DiT 架构（2B），走 UNETLoader+CLIPLoader+VAELoader，少女纤细配方，单张约 60 秒；SD1.5 快路径仍在（15~45 秒）；画前停 TTS、画完关 ComfyUI。纯插件，不改核心。",
   "author": "local",
   "category": "media",
   "enabledByDefault": false,
@@ -23,21 +23,22 @@
     "defaultUpscale": 1,
     "autoStopVoice": true,
     "ttsPort": 9880,
-    "gptSovitsDir": "D:\\GPT-SoVITS",
-    "pythonExe": "D:\\GPT-SoVITS\\python310\\python.exe",
+    "gptSovitsDir": "",
+    "pythonExe": "",
     "ttsConfig": "GPT_SoVITS/configs/tts_infer_zh.yaml",
     "qualityPrefix": "masterpiece, best quality, very aesthetic, absurdres",
     "negative": "",
     "presets": {},
-    "stopComfyAfterDraw": true,
+    "stopComfyAfterDraw": false,
     "stopComfyDelayMs": 20000,
     "restartVoiceAfterDraw": false,
     "allowNatural": true,
-    "comfyDir": "",
-    "comfyPython": "",
-    "comfyYaml": "",
-    "comfyInputDir": "",
-    "comfyOutputDir": ""
+    "animaUnet": "anima-aesthetic-v1.1.safetensors",
+    "animaClip": "qwen_3_06b_base.safetensors",
+    "animaVae": "qwen_image_vae.safetensors",
+    "animaDailyCap": 5,
+    "animaCooldownSeconds": 120,
+    "defaultPreset": "鲸鱼娘Anima"
   },
   "configSchema": {
     "enabled": {
@@ -78,7 +79,7 @@
     "allowGroups": {
       "type": "boolean",
       "label": "允许群聊画图",
-      "description": "打开后群里 @她 才能触发；关掉则只在私聊响应。"
+      "description": "打开后群里 @她 才能触发；关掉则只在私聊响应"
     },
     "cooldownSeconds": {
       "type": "number",
@@ -98,7 +99,7 @@
     "defaultUpscale": {
       "type": "number",
       "label": "默认放大倍数",
-      "description": "1=不额外放大（预设自带二段放大）；2=再用 4x 模型放大到 2 倍。"
+      "description": "1=不额外放大（预设自带二段放大）"
     },
     "autoStopVoice": {
       "type": "boolean",
@@ -143,7 +144,7 @@
     "stopComfyAfterDraw": {
       "type": "boolean",
       "label": "画完关闭 ComfyUI",
-      "description": "常态不占显存：出图后等一小会儿把 ComfyUI 关掉，下次画图自动拉起（约 25 秒）。"
+      "description": "默认**关**。开启时画完 20 秒会关掉 ComfyUI 释放显存，但下次画图要靠自动拉起——在本机（2026-10-26 实测）自动拉起不生效，ComfyUI 起不来，画图会干等 2 分钟才报错。除非你确认自动拉起来能工作，否则保持关闭。"
     },
     "stopComfyDelayMs": {
       "type": "number",
@@ -153,37 +154,42 @@
     "restartVoiceAfterDraw": {
       "type": "boolean",
       "label": "画完自动重启语音",
-      "description": "默认关。8GB 卡上 TTS 与画图互斥，画完不急着拉起，等下次用语音再说。"
+      "description": "默认关。8GB 卡上 TTS 与画图互斥，画完不急着拉起。"
     },
     "allowNatural": {
       "type": "boolean",
       "label": "自然语言触发",
-      "description": "打开后「画一张…」「帮我画个…」「来张图…」不用打 /画 也能出图。"
+      "description": "打开后「画一张…」「帮我画个…」不用打 /画 也能出图。"
     },
-    "comfyDir": {
+    "animaUnet": {
       "type": "string",
-      "label": "ComfyUI 目录",
-      "description": "ComfyUI 主目录（含 main.py）。填了之后，画图时 ComfyUI 没在跑会自动拉起；留空则只连已在运行的实例。"
+      "label": "Anima 主模型",
+      "description": "models/diffusion_models 下的文件名，默认 anima-aesthetic-v1.1.safetensors（画风最好）；备选 anima-base-v1.0 / anima-aesthetic-v1.0b。"
     },
-    "comfyPython": {
+    "animaClip": {
       "type": "string",
-      "label": "ComfyUI 的 Python",
-      "description": "ComfyUI 那个 venv 里的 python.exe，例如 <ComfyUI>/.venv/Scripts/python.exe"
+      "label": "Anima 文本编码器",
+      "description": "models/text_encoders 下的文件名，默认 qwen_3_06b_base.safetensors。"
     },
-    "comfyYaml": {
+    "animaVae": {
       "type": "string",
-      "label": "模型路径配置（可选）",
-      "description": "ComfyUI 桌面版的 --extra-model-paths-config 文件；模型放在别处时需要，留空则不加这个参数。"
+      "label": "Anima VAE",
+      "description": "models/vae 下的文件名，默认 qwen_image_vae.safetensors。"
     },
-    "comfyInputDir": {
-      "type": "string",
-      "label": "输入目录（可选）",
-      "description": "骨骼图放在这里。留空则用 ComfyUI 自己的 input/。"
+    "animaDailyCap": {
+      "type": "number",
+      "label": "Anima 每日上限",
+      "description": "单独计数（不占普通画图额度）。默认 5 —— 一张约 60 秒、占 5.5GB 显存，防止被人连刷。"
     },
-    "comfyOutputDir": {
+    "animaCooldownSeconds": {
+      "type": "number",
+      "label": "Anima 冷却（秒）",
+      "description": "默认 120。Anima 比 SD1.5 重一倍多，冷却长一点更稳。"
+    },
+    "defaultPreset": {
       "type": "string",
-      "label": "输出目录（可选）",
-      "description": "留空则用 ComfyUI 自己的 output/。"
+      "label": "默认预设",
+      "description": "群友没说用哪个时用这个。默认 鲸鱼娘Anima（少女感，约 55 秒）。想成年比例就填 鲸鱼娘成年；要快就填 鲸鱼娘（SD1.5，约 45 秒）。"
     }
   }
 }

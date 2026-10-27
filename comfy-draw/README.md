@@ -9,11 +9,13 @@
 @她 /画 帮助                        → 用法、预设、姿势一览
 ```
 
-- 中文描述由**她自己的模型**翻成 Danbooru 标签，不用你写英文
-- 5 套预设：**鲸鱼娘**（角色立绘，SD1.5）/ **头像** / **立绘** / **表情包**（最快）/ **场景**
+- 中文描述由**她自己的模型**翻成 Danbooru 标签，不用你写英文；**服装词走本地词典硬替换**（汉服/和服/旗袍…不会被译歪）
+- 7 套预设：**鲸鱼娘Anima**（默认，18 岁少女感）/ **鲸鱼娘成年** / **鲸鱼娘**（SD1.5 快档）/ **头像** / **立绘** / **表情包**（最快）/ **场景**
+- **Anima（DiT 2B）支持**：新底模，画风和角色一致性都比 SD1.5 高一档（详见第十节）
 - 7 套 OpenPose 骨骼：站着 / 挥手 / 撑伞 / 坐着 / 走路 / 背手 / 回眸，按描述自动挑
-- 8 GB 显存友好：画前停 TTS、画完关 ComfyUI，空闲不占显存
-- 限额：每人每天 10 张、冷却 60 秒、群里需 @
+- 8 GB 显存友好：画前停 TTS；CUDA 崩了自动重启重试，Anima 失败还会退回 SD1.5
+- 限额：普通档每人每天 10 张 / 冷却 60 秒；**Anima 单独 5 张 / 冷却 120 秒**，用完不影响普通档
+- 刚画完 90 秒内只认显式 `/画`，夸一句“画得很好”不会再画一张
 
 ---
 
@@ -36,11 +38,15 @@
 
 | 预设 | 模型 | 尺寸 | 二段放大 | 用途 | 参考耗时 |
 |:---|:---|:---|:---|:---|:---|
-| `鲸鱼娘` | SD1.5 | 768×1024 | 1.25× | 角色立绘（自带角色 LoRA + 女仆装默认值） | 45~60 s |
+| **`鲸鱼娘Anima`**（默认） | Anima 2B | 832×1216 | — | 鲸鱼娘本命图，18 岁少女感 | **50~60 s** |
+| `鲸鱼娘成年` | Anima 2B | 832×1216 | — | 同角色成年比例 | 50~60 s |
+| `鲸鱼娘` | SD1.5 | 768×1024 | 1.25× | 旧版角色立绘，最快 | 45~60 s |
 | `头像` | SDXL | 1024×1024 | — | 头像、特写 | 25~40 s |
-| `立绘` | SDXL | 832×1216 | — | 全身立绘（默认） | 25~40 s |
+| `立绘` | SDXL | 832×1216 | — | 全身立绘 | 25~40 s |
 | `表情包` | SD1.5 | 512×512 | — | Q 版、贴纸 | ~9 s |
 | `场景` | SDXL | 1216×832 | — | 横版风景/背景 | 25~40 s |
+
+没指定预设时的兜底由 `defaultPreset` 决定（默认 `鲸鱼娘Anima`）；描述里说“鲸鱼娘”也会命中它。
 
 > 想改尺寸/步数/CFG：设置页的 `presets` 里写同名键即可覆盖，不用改代码。
 
@@ -52,7 +58,7 @@
 
 | 参数 | 说明 |
 |:---|:---|
-| `--预设 名字` | 头像 / 立绘 / 表情包 / 场景 / 鲸鱼娘；不写会按描述自动猜 |
+| `--预设 名字` | 鲸鱼娘Anima / 鲸鱼娘成年 / 鲸鱼娘 / 头像 / 立绘 / 表情包 / 场景；不写按描述自动猜，猜不到用默认档 |
 | `--放大 N` | 用 4x 模型放大到 N 倍（默认不额外放大，预设自带二段放大） |
 | `--种子 N` | 固定种子复现；出图后她会在图片说明里带上 seed |
 | `--姿势 词` | wave / hold / sit / walk / backhands / turn / stand，也认中文 |
@@ -78,7 +84,9 @@
 
 ### 可选：没在跑就自动拉起 ComfyUI
 
-填了 `comfyDir` + `comfyPython` 之后，画图时 ComfyUI 没起会自动启动并等就绪（约 25 秒），画完 20 秒再关掉（`stopComfyAfterDraw`）。
+填了 `comfyDir` + `comfyPython` 之后，ComfyUI 没起时会尝试自动启动（也可 `POST /api/skills/comfy-draw/action/startComfy` 手动触发）。
+
+> ⚠️ **`stopComfyAfterDraw` 默认关闭**：开启后画完 20 秒会关掉 ComfyUI 释放显存，但下次画图就得靠自动拉起——作者本机实测自动拉起**不生效**（cmd / .bat / `start /b` 三种都试过），结果就是“等两分钟然后失败”。除非你确认自动拉起来能工作，否则保持关闭。
 
 ```text
 comfyDir      ComfyUI 主目录（含 main.py）
@@ -139,3 +147,69 @@ comfyInputDir / comfyOutputDir   可选，骨骼图与出图目录
 | `onebot.mjs` | 发送通道（钩子里没有 `sender`，自己走 OneBot HTTP） |
 
 `core.mjs` 是**故意**和 DSH 技能共用同一份的：两边参数永远一致，改一处两边一起变。
+
+## 十、Anima（DiT）支持 · v0.4 新增
+
+Anima 是 CircleStone Labs 与 Comfy Org 合作的 2B 动漫模型（DiT 架构，Qwen3-0.6B 文本编码器 + Qwen-Image VAE）。它在插件里和 SD1.5/SDXL 走**两条不同的工作流**。
+
+### 需要哪些文件
+
+```text
+models/diffusion_models/anima-aesthetic-v1.1.safetensors   3.9 GB   （推荐；另有 anima-base-v1.0 / aesthetic-v1.0b）
+models/text_encoders/qwen_3_06b_base.safetensors           1.1 GB
+models/vae/qwen_image_vae.safetensors                      242 MB
+models/loras/ds_whalemaid_comfy.safetensors                175 MB   （角色 LoRA，需转换，见下）
+```
+
+全部来自 [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima)，官方教程：[Anima Base v1 · ComfyUI Docs](https://docs.comfy.org/tutorials/image/anima/anima)。
+设置页对应 `animaUnet` / `animaClip` / `animaVae` 三项。
+
+### 角色 LoRA 必须转换格式
+
+kohya 训练的 Anima LoRA 是 `lora_unet_blocks_*` 命名，ComfyUI 认不出来（实测 840 个键全部 `lora key not loaded`，权重 0 和 0.8 出图完全一样）。用 kohya 自带脚本转一次：
+
+```bash
+python networks/convert_anima_lora_to_comfy.py ds_whalemaid.safetensors ds_whalemaid_comfy.safetensors
+```
+
+转换后键名变成 `diffusion_model.blocks.0.cross_attn.k_proj.lora_A.weight`。
+
+### 官方出图参数（别按 SD 的习惯来）
+
+| 参数 | 值 |
+|:---|:---|
+| 加载器 | `UNETLoader` + `CLIPLoader(type=stable_diffusion)` + `VAELoader` |
+| 采样器 / 调度器 | **euler / simple** |
+| 步数 / CFG | **30 / 4**（CFG 这么低是正常的） |
+| 尺寸 | 832×1216 或 1024×1024 |
+| LoRA 节点 | `LoraLoaderModelOnly`（该 LoRA 没有 TE 部分） |
+
+### 实测开销（RTX 4060 Laptop 8 GB）
+
+| 档位 | 单张 | 显存峰值 |
+|:---|:---|:---|
+| Anima（30 步） | 45~60 s | **约 5.5 GB** |
+| SD1.5 快档 | 9~45 s | ~2 GB |
+
+Anima 与 TTS 同跑基本必崩（`torch.AcceleratorError: CUDA error`）。插件现在会：停 TTS 后**复检端口**，没关干净就直接报错；真崩了**重启 ComfyUI 再试一次**；还不行就**自动退回 SD1.5**，群里至少能拿到图。
+
+### 内置的免踩坑处理
+
+| 处理 | 说明 |
+|:---|:---|
+| `1girl, solo` 固化在预设里 | 否则 `18 years old` 这类词会让模型画成两个并排的人 |
+| 服装词典 | 汉服=hanfu、和服=kimono、旗袍=qipao… 在翻译**之前**硬替换，避免“汉服”被译成 bikini |
+| 女仆词自动让位 | 用户写了别的服装时，负向自动加 `apron, maid`，否则 LoRA 会硬塞围裙 |
+| 长度词自己写 | 想要长裙必须写“长裙/及踝”，预设不会替你决定衣长 |
+| 不支持 `--放大` | Anima 分支还没接放大模型（SD/SDXL 预设可用） |
+
+### 排障接口
+
+```text
+POST /api/skills/comfy-draw/action/status       → ComfyUI 状态、显存、当前预设
+POST /api/skills/comfy-draw/action/startComfy   → 手动触发自动拉起
+POST /api/skills/comfy-draw/action/stopComfy    → 关掉 ComfyUI 释放显存
+POST /api/skills/comfy-draw/action/draw         → {"prompt":"…","preset":"鲸鱼娘Anima"} 直接画一张
+```
+
+> 注意：`core.mjs` 是 ES 模块，`/api/skills/reload` 只会重新加载 `index.js`——**改了 core 必须重启 QQ Agent**。

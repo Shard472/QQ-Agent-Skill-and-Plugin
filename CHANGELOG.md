@@ -7,6 +7,51 @@
 
 ## 🎨 画舫（comfy-draw）
 
+### [0.4.3] — 2026-10-26
+
+**Anima 全面接入 + 一堆线上踩坑修复。**
+
+**新增**
+
+- **Anima（DiT 2B）支持**：新增 `buildAnima()`，走 `UNETLoader` + `CLIPLoader(type=stable_diffusion)` + `VAELoader`
+  + `LoraLoaderModelOnly`，euler/simple、30 步、CFG 4，与 SD 工作流并行存在
+- **两档鲸鱼娘 Anima 预设**：`鲸鱼娘Anima`（默认，18 岁少女感）/ `鲸鱼娘成年`（成年比例）；
+  旧的 SD1.5 `鲸鱼娘` 保留为快档
+- **`defaultPreset` 设置**：没指定预设时用哪一档；说“鲸鱼娘”也会命中默认档
+- **服装词典硬替换**：汉服=hanfu、和服=kimono、旗袍=qipao… 在交给 LLM 翻译**之前**替换，
+  避免“汉服”被译成 bikini
+- **Anima 独立限额**：`animaDailyCap`(5) / `animaCooldownSeconds`(120)，单独计数桶 `<会话>#anima`，
+  不占普通额度
+- **排障动作接口**：`action/status` / `startComfy` / `stopComfy` / `draw`
+- **自动降级**：Anima 失败自动用 SD1.5 重画一次，群里不会空手
+
+**修复**
+
+- **夸一句“画得很好”会再画一张**：`parseImplicit` 只认句首“画”，把评价也当成了指令；
+  现在以“得/的/完/好/不错/棒…”开头的直接不当指令，且画完 90 秒内只认显式 `/画`
+- **私聊画不出来（等两分钟）**：`stopComfyAfterDraw` 开着时画完就关 ComfyUI，下次画图依赖自动拉起，
+  而本机自动拉起不生效 → 默认改成关闭，并在拉起失败时返回可执行的手动命令
+- **CUDA 崩了就废掉**：`torch.AcceleratorError: CUDA error` 后无法再画；现在检测到 CUDA/OOM
+  会自动重启 ComfyUI 并重试一次
+- **TTS 没关干净导致撞 CUDA**：停 TTS 后复检端口，没关掉就明确报错而不是拖到采样阶段
+- **`presets` 被写成数组时造出假预设**：`{...s.presets}` 会生成 "0"~"14"；改成只接受纯对象
+- **`1girl, solo` 丢失导致画成双人**：固化进预设，负向补 `2girls, multiple girls`
+- **写状态失败**：`writeState` 没有 mkdir 数据目录，静默失败导致限额不计数
+- **`Number(x) || 默认` 把 0 当成未设置**：限额/冷却填 0 会被忽略
+- **`core.mjs` 改了热重载不生效**：ES 模块缓存，必须重启应用（文档已注明）
+- **DSH 技能 CLI 读错配置层级**：一直读 `skills['comfy-draw'].comfyUrl`，实际在 `.settings` 下，
+  导致配置从未生效；已兼容两种结构并透传 anima 模型名 / defaultPreset
+- **启动方式**：优先 `cmd /c start "" /b <python>`（带 cwd）+ 单行 `cd /d … && python …`，.bat 作兜底；
+  实测 .bat 路径在本机静默失败
+
+**已知限制**
+
+- Anima 分支暂不支持 `--放大`
+- Anima 与 TTS 不能同跑（8 GB 卡上必崩）
+- 应用内自动拉起 ComfyUI 在作者本机不生效，需手动启动或用 `action/startComfy` 观察结果
+
+---
+
 ### [0.2.0] — 2026-10-25
 
 首个公开版本。接本地 ComfyUI，让她在 QQ 里会画画。

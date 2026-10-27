@@ -24,6 +24,7 @@ const DEFAULTS = {
   vaeSdxl: 'sdxl-vae-fp16-fix.safetensors',
   upscaler: '4x-AnimeSharp.pth',
   command: '/画',
+  defaultPreset: '鲸鱼娘Anima',   // 默认少女版（2026-10-26 复核：观感更好）
   allowGroups: true,
   cooldownSeconds: 60,
   dailyCap: 10,
@@ -64,6 +65,18 @@ const DEFAULTS = {
 const log = (m) => api?.log?.(m);
 const warn = (m) => api?.warn?.(m);
 
+/**
+ * 取"用户自定义预设"。
+ * 注意：config.json 里这个字段历史上被写成过数组，直接 {...s.presets} 会造出
+ * "0"~"14" 这种假预设名（实测出现在 status 的 presets 列表里）。
+ * 不是纯对象就当没有。
+ */
+function presetsOf(s) {
+  const p = s?.presets;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return {};
+  return p;
+}
+
 function settings() {
   try {
     const c = api?.config?.();
@@ -82,9 +95,13 @@ export function coreConfig(s = settings()) {
       sd15: s.modelSd15,
       sdxl: s.modelSdxl,
       vaeSdxl: s.vaeSdxl,
-      upscaler: s.upscaler
+      upscaler: s.upscaler,
+      animaUnet: s.animaUnet || 'anima-aesthetic-v1.1.safetensors',
+      animaClip: s.animaClip || 'qwen_3_06b_base.safetensors',
+      animaVae: s.animaVae || 'qwen_image_vae.safetensors'
     },
-    presets: { ...DEFAULT_PRESETS, ...(s.presets || {}) },
+    presets: { ...DEFAULT_PRESETS, ...presetsOf(s) },
+    defaultPreset: s.defaultPreset || '鲸鱼娘Anima',
     comfyStart: {
       dir: s.comfyDir,
       python: s.comfyPython,
@@ -121,8 +138,47 @@ const TAG_RULES = [
   '如果用户描述的是角色，把角色名写成 `角色名 (作品名)` 的形式（不确定就按字面描述外观）。',
   '如果描述里含中文背景/场景，翻成英文场景标签（city, night, rain, classroom 等）。',
   '不要写构图/背景类型标签（portrait, upper body, full body, close-up, simple background, ' +
-    'white background, detailed background, scenery, wide shot 等）——这些由预设统一控制。'
+    'white background, detailed background, scenery, wide shot 等）——这些由预设统一控制。',
+  // 服装固定译法：中文服装名一定要给对应 Danbooru 标签，别自己发挥（曾把"汉服"译成 bikini）
+  '服装固定译法（必须照用）：汉服=hanfu、和服/浴衣=kimono、旗袍=qipao、水手服=sailor collar uniform、' +
+    '校服=school uniform、女仆装=maid、洛丽塔=lolita fashion、泳装=swimsuit、连体泳衣=one-piece swimsuit、' +
+    '比基尼=bikini、睡衣=pajamas、运动服=tracksuit、大衣=coat、风衣=trench coat、毛衣=sweater、' +
+    '长裙=long skirt、短裙=short skirt、白丝=white thighhighs。'
 ].join('\n');
+
+/**
+ * 服装词典：中文/别称 → Danbooru 标签。
+ * 为什么在翻译**之前**硬替换：LLM 翻译层把「汉服」译成过 bikini，
+ * 而 Anima 的 Qwen3 文本编码器又直接读得懂中文（会把「汉服」读成泳装意象）。
+ * 两头都不可靠，这一步不交给模型，直接查表。长词必须排在短词前面。
+ */
+const OUTFIT_GLOSSARY = [
+  ['连体泳衣', 'one-piece swimsuit'], ['死库水', 'school swimsuit'],
+  ['洛丽塔', 'lolita fashion'], ['水手服', 'sailor collar, school uniform'],
+  ['女仆装', 'maid, white apron'], ['白大褂', 'lab coat'], ['运动服', 'tracksuit'],
+  ['小西装', 'blazer'], ['吊带裙', 'camisole dress'], ['连衣裙', 'one-piece dress'],
+  ['长裙', 'long skirt'], ['短裙', 'short skirt'], ['包臀裙', 'pencil skirt'],
+  ['和服', 'kimono'], ['浴衣', 'yukata'], ['汉服', 'hanfu'], ['旗袍', 'qipao'],
+  ['校服', 'school uniform'], ['泳装', 'swimsuit'], ['泳衣', 'swimsuit'],
+  ['睡衣', 'pajamas'], ['毛衣', 'sweater'], ['卫衣', 'hoodie'], ['风衣', 'trench coat'],
+  ['大衣', 'coat'], ['外套', 'jacket'], ['衬衫', 'shirt'], ['T恤', 't-shirt'],
+  ['婚纱', 'wedding dress'], ['礼服', 'evening gown'], ['白丝', 'white thighhighs'],
+  ['黑丝', 'black thighhighs'], ['过膝袜', 'thighhighs'], ['围巾', 'scarf'], ['眼镜', 'glasses']
+];
+
+/** 把中文服装词换成英文标签；返回 { text, tags }。 */
+export function applyOutfitGlossary(text) {
+  let out = String(text || '');
+  const tags = [];
+  for (const pair of OUTFIT_GLOSSARY) {
+    const zh = pair[0], en = pair[1];
+    if (!zh || !out.includes(zh)) continue;
+    out = out.split(zh).join(' ');
+    if (!tags.includes(en)) tags.push(en);
+  }
+  out = out.replace(/\s{2,}/g, ' ').replace(/^[\s,，。]+|[\s,，。]+\$/g, '').trim();
+  return { text: out, tags };
+}
 
 const tagCache = new Map();
 const hasCJK = (t) => /[\u4e00-\u9fff]/.test(String(t || ''));
@@ -161,7 +217,7 @@ export async function translateToTags(text) {
 
 // ── 指令解析 ────────────────────────────────────────────────────────────────
 
-const PRESET_RE = '(头像|立绘|表情包|场景|鲸鱼娘)';
+const PRESET_RE = '(鲸鱼娘Anima|头像|立绘|表情包|场景|鲸鱼娘|Anima|anima)';
 const HELP_WORDS = /^(帮助|help|说明|用法|\?|？)$/i;
 
 /** 骨骼文件 → 中文名（用于确认话术和图片说明） */
@@ -180,8 +236,17 @@ export function poseLabel(pose) {
   return POSE_LABELS[pose] || pose.replace('pose-', '').replace('.png', '');
 }
 
+/** 预设别名：Anima / anima / 鲸鱼娘anima → 鲸鱼娘Anima（不用正则，避免转义踩坑） */
+export function normalizePreset(name) {
+  const n = String(name || '').trim();
+  if (!n) return n;
+  const low = n.toLowerCase().replace(/\s+/g, "");
+  if (low === 'anima' || low === '鲸鱼娘anima') return '鲸鱼娘Anima';
+  return n;
+}
+
 export function presetNames(s = DEFAULTS) {
-  return Object.keys({ ...DEFAULT_PRESETS, ...(s.presets || {}) });
+  return Object.keys({ ...DEFAULT_PRESETS, ...presetsOf(s) });
 }
 
 export function helpText(s = DEFAULTS) {
@@ -193,12 +258,14 @@ export function helpText(s = DEFAULTS) {
     `预设：${presetNames(s).join(' / ')}`,
     `姿势（会自动识别）：${poses.join(' / ')}`,
     `例子：`,
+    `  ${cmd} 鲸鱼娘穿和服在樱花树下 --预设 Anima   ← Anima 版（少女纤细，约 60 秒）`,
     `  ${cmd} 鲸鱼娘在海边挥手`,
     `  ${cmd} 鲸鱼娘 穿泳装 在海边 --放大 2`,
     `  ${cmd} 鲸鱼娘 坐着看落日 --种子 1234`,
     `  ${cmd} 笑得开心 --预设 表情包`,
     `  ${cmd} 鲸鱼娘 --无骨骼（自由构图，不用骨骼约束）`,
-    `说明：群里要 @我 才行；每人每天 ${Number(s.dailyCap) || 10} 张，冷却 ${Number(s.cooldownSeconds) || 60} 秒。`
+    `说明：群里要 @我 才行；普通版每人每天 ${Number(s.dailyCap) || 10} 张 / 冷却 ${Number(s.cooldownSeconds) || 60} 秒；`,
+    `  Anima 版每人每天 ${Number(s.animaDailyCap) || 5} 张 / 冷却 ${Number(s.animaCooldownSeconds) || 120} 秒（一张约 60 秒）。`
   ].join('\n');
 }
 
@@ -223,6 +290,9 @@ export function parseImplicit(text) {
   const prompt = String(m[1] || '').replace(/^(图|画面)[\s]*/, '').replace(/[。！!？?，,、\s]+$/, '').trim();
   if (prompt.length < 2) return null;
   if (/^(图|画|个画|一张|张图|个图)$/.test(prompt)) return null;
+  // 2026-10-26 线上踩到：夸一句「画得很好」也被当成指令，她又画了一遍。
+  // 以这些字开头的都不是"画什么"，是评价/追问，直接不当指令。
+  if (/^(得|的|完|好|不错|棒|厉害|漂亮|美|可以|行|谢谢|谢|对了|呢|了|过|出来|丢了|没了|糊|丑|怪)/.test(prompt)) return null;
   return { prompt, implicit: true };
 }
 
@@ -310,7 +380,7 @@ export function parseCommand(text, s = DEFAULTS) {
       rest = rest.slice(mHead[0].length).trim();
     }
   }
-
+  preset = normalizePreset(preset);   // Anima / anima / 鲸鱼娘anima → 鲸鱼娘Anima
   return {
     prompt: rest,
     preset,
@@ -338,6 +408,7 @@ function readState() {
 
 function writeState(st) {
   try {
+    fs.mkdirSync(path.dirname(statePath()), { recursive: true });
     fs.writeFileSync(statePath(), JSON.stringify(st, null, 1), 'utf8');
   } catch (e) {
     warn(`写状态失败：${e?.message ?? e}`);
@@ -349,18 +420,29 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function rateOk(s, chatKey) {
+function rateOk(s, chatKey, kind = 'sd') {
   const st = readState();
   const day = todayKey();
   if (st.day !== day) { st.day = day; st.daily = {}; }
   st.daily = st.daily || {};
   st.lastAt = st.lastAt || {};
-  const cap = Number(s.dailyCap) || 10;
-  if (Number(st.daily[chatKey] || 0) >= cap) {
-    return { ok: false, why: `今天这里画够了（上限 ${cap} 张），明天再来吧` };
+  const isAnima = kind === 'anima';
+  const key = isAnima ? `${chatKey}#anima` : chatKey;
+  // 注意别用 Number(x) || 默认：配 0（=不限）会被当成未设置
+  const capRaw = Number(isAnima ? s.animaDailyCap : s.dailyCap);
+  const cap = Number.isFinite(capRaw) ? capRaw : (isAnima ? 5 : 10);
+  const cdRaw = Number(isAnima ? s.animaCooldownSeconds : s.cooldownSeconds);
+  const cdSec = Number.isFinite(cdRaw) ? cdRaw : (isAnima ? 120 : 60);
+  if (Number(st.daily[key] || 0) >= cap) {
+    return {
+      ok: false,
+      why: isAnima
+        ? `今天 Anima 版画够了（上限 ${cap} 张，60 秒一张的重活），用普通版还能画`
+        : `今天这里画够了（上限 ${cap} 张），明天再来吧`
+    };
   }
-  const cd = Math.max(0, Number(s.cooldownSeconds) || 0) * 1000;
-  const last = Number(st.lastAt[chatKey] || 0);
+  const cd = Math.max(0, cdSec) * 1000;
+  const last = Number(st.lastAt[key] || 0);
   if (cd && Date.now() - last < cd) {
     return { ok: false, why: `别急，${Math.ceil((cd - (Date.now() - last)) / 1000)} 秒后再画` };
   }
@@ -397,6 +479,16 @@ function cancelComfyStop() {
 // （否则会出现"我哪来的笔""现成的鲸鱼娘"这种自相矛盾的话）。
 const suppressUntil = new Map();   // chatKey → 截止时间戳
 
+/** 记一笔这里刚画完，用于隐式触发的静默期。 */
+function markDrew(chatKey) {
+  try {
+    const st = readState();
+    st.lastDrawAt = st.lastDrawAt || {};
+    st.lastDrawAt[chatKey] = Date.now();
+    writeState(st);
+  } catch { /* ignore */ }
+}
+
 function markSuppress(chatKey) {
   suppressUntil.set(String(chatKey), Date.now() + 25_000);
 }
@@ -417,14 +509,15 @@ function drawingNow(chatKey) {
   return Boolean(t0) && Date.now() - t0 < 150000;
 }
 
-function markUsed(chatKey) {
+function markUsed(chatKey, kind = 'sd') {
   const st = readState();
   const day = todayKey();
   if (st.day !== day) { st.day = day; st.daily = {}; }
   st.daily = st.daily || {};
-  st.daily[chatKey] = Number(st.daily[chatKey] || 0) + 1;
+  const key = kind === 'anima' ? `${chatKey}#anima` : chatKey;
+  st.daily[key] = Number(st.daily[key] || 0) + 1;
   st.lastAt = st.lastAt || {};
-  st.lastAt[chatKey] = Date.now();
+  st.lastAt[key] = Date.now();
   writeState(st);
 }
 
@@ -438,12 +531,17 @@ export async function draw(opts = {}) {
   const up = await ensureComfy(cfg);
   if (!up.ok) throw new Error(up.why || 'ComfyUI 没起来');
   if (up.started) log('ComfyUI 刚被拉起，等待就绪…');
-  const tags = await translateToTags(desc);
+  // ① 先把服装词按词典换成英文标签（不交给模型），② 剩下的再交给翻译层
+  const g = applyOutfitGlossary(desc);
+  const restDesc = g.text || desc;
+  const translated = await translateToTags(restDesc);
+  const tags = [g.tags.join(', '), translated].filter(Boolean).join(', ') || desc;
   const upscale = Number(opts.upscale) || Number(s.defaultUpscale) || 1;
+  const presetName = normalizePreset(opts.preset);
   const r = await coreDraw(coreConfig(s), {
     prompt: desc,
     tags,
-    preset: opts.preset,
+    preset: presetName,
     seed: opts.seed,
     pose: opts.pose,
     upscale,
@@ -454,11 +552,14 @@ export async function draw(opts = {}) {
 
 /** 生成一句人话确认：「好，画（鲸鱼娘，挥手）…约 60~90 秒」 */
 export function ackText(cmd, s = DEFAULTS) {
-  const picked = pickPreset(cmd.prompt, cmd.preset, { ...DEFAULT_PRESETS, ...(s.presets || {}) });
+  const picked = pickPreset(cmd.prompt, cmd.preset, { ...DEFAULT_PRESETS, ...presetsOf(s) });
   const pose = cmd.pose || matchPose(cmd.prompt);
   const poseName = poseLabel(pose);
+  const isAnima = String(picked?.preset?.family || '') === 'anima';
   const extra = [picked.name, poseName].filter(Boolean).join('，');
-  return `好，画${extra ? `（${extra}）` : ''}…大约 60~90 秒`;
+  return isAnima
+    ? `好，画${extra ? `（${extra}）` : ''}…Anima 版慢一点，大约 60~90 秒`
+    : `好，画${extra ? `（${extra}）` : ''}…大约 45~70 秒`;
 }
 
 // ── 生命周期 ────────────────────────────────────────────────────────────────
@@ -474,14 +575,14 @@ export function setup(a) {
       'prompt 可以直接写中文（会自动翻成模型标签），写具体些：人物/服装/动作/场景/光线。' +
       'preset 决定尺寸风格：鲸鱼娘（默认角色，896x1152 竖版）/ 头像（方形特写）/ 立绘（竖版全身）/' +
       '表情包（512 小图，最快）/ 场景（横版风景）。姿势会从 prompt 自动识别（挥手/撑伞/坐着/走路/背手/回眸）。' +
-      '画一张约 60~90 秒，别连续调很多次。',
+      '默认用鲸鱼娘成年（成年比例，约 55 秒）；少女版传 鲸鱼娘Anima；想快传 鲸鱼娘（约 45 秒）。别连续调很多次，对方只是夸你别再画。',
     category: 'media',
     icon: '🎨',
     parameters: {
       type: 'object',
       properties: {
         prompt: { type: 'string', description: '想画什么，中文即可，写具体（人物/服装/动作/场景/光线）' },
-        preset: { type: 'string', enum: ['鲸鱼娘', '头像', '立绘', '表情包', '场景'], description: '预设，默认鲸鱼娘' },
+        preset: { type: 'string', enum: ['鲸鱼娘成年', '鲸鱼娘Anima', '鲸鱼娘', '头像', '立绘', '表情包', '场景'], description: '预设。不传 = 鲸鱼娘成年（默认，成年比例，约 55 秒）；鲸鱼娘Anima = 少女纤细版；鲸鱼娘 = SD1.5 快版（约 45 秒）' },
         upscale: { type: 'number', description: '放大倍数：1=不额外放大（默认），2=四倍模型放大后缩到 2 倍' },
         seed: { type: 'number', description: '固定种子可复现，不传则随机' },
         pose: { type: 'string', description: '骨骼姿势：stand/wave/hold/sit/walk/backhands/turn，不传则自动识别' }
@@ -493,11 +594,13 @@ export function setup(a) {
         const s = settings();
         if (s.enabled === false) return { content: '画笔插件已关闭。', isError: true };
         const chatKey = String(ctx.chatKey || '');
-        const gate = rateOk(s, chatKey);
+        const pickedForGate = pickPreset(args?.prompt || '', normalizePreset(args?.preset), { ...DEFAULT_PRESETS, ...presetsOf(s) });
+        const kind = String(pickedForGate?.preset?.family || '') === 'anima' ? 'anima' : 'sd';
+        const gate = rateOk(s, chatKey, kind);
         if (!gate.ok) return { content: gate.why, isError: true };
         if (!String(args?.prompt || '').trim()) return { content: '没说要画什么，加一句描述。', isError: true };
         if (drawingNow(chatKey)) return { content: '上一张还在画，等它出来再说。' };
-        markUsed(chatKey);
+        markUsed(chatKey, kind);
         cancelComfyStop();
         inflight.set(chatKey, Date.now());
         const r = await draw({
@@ -510,16 +613,81 @@ export function setup(a) {
         await obSendImage(getConfig, chatKey, r.file);
         inflight.delete(chatKey);
         scheduleComfyStop(s, chatKey);
+        markDrew(chatKey);
         return {
           content: `画好了并发出去：${r.preset}，${r.width}x${r.height}，seed ${r.seed}，用时 ${(r.ms / 1000).toFixed(1)} 秒。` +
             `用的标签：${r.tags}`
         };
       } catch (e) {
         try { inflight.delete(chatKey); } catch { /* ignore */ }
-        return { content: `画图失败：${String(e?.message ?? e).slice(0, 140)}`, isError: true };
+        const msg = String(e?.message ?? e);
+        warn(`画图失败（preset=${args?.preset || '自动'}）：${msg}`);
+        // Anima 挂了（模型没加载上/显存不够/超时）就自动退回 SD1.5 快档，别让群友空等
+        const wasAnima = String(normalizePreset(args?.preset)) === '鲸鱼娘Anima';
+        if (wasAnima && !/已退回/.test(msg)) {
+          try {
+            warn('Anima 失败，自动退回 SD1.5 快档重试一次');
+            const r2 = await draw({ prompt: args.prompt, preset: '鲸鱼娘', upscale: args.upscale, seed: args.seed });
+            await obSendImage(getConfig, chatKey, r2.file);
+            inflight.delete(chatKey);
+            scheduleComfyStop(settings(), chatKey);
+            return {
+              content: `Anima 版没画成（${msg.slice(0, 80)}），已退回普通版出图：${r2.width}x${r2.height}，seed ${r2.seed}，`
+                + `用时 ${(r2.ms / 1000).toFixed(1)} 秒。（已退回，非 Anima 版）`
+            };
+          } catch (e2) {
+            warn(`退回 SD1.5 也失败：${String(e2?.message ?? e2)}`);
+            return {
+              content: `画图失败（Anima 与普通版都没成）：${String(e2?.message ?? e2).slice(0, 120)}`,
+              isError: true
+            };
+          }
+        }
+        return { content: `画图失败：${msg.slice(0, 140)}`, isError: true };
       }
     }
   });
+}
+
+/**
+ * 给控制台 / 排障用的动作入口（POST /api/skills/comfy-draw/action/<key>）
+ *   status      → ComfyUI 是否在跑、显存、当前设置
+ *   startComfy  → 手动触发自动拉起（排查"自动启动到底行不行"）
+ *   stopComfy   → 关掉 ComfyUI 释放显存
+ *   draw        → body: { prompt, preset } 直接画一张（不发 QQ，返回文件路径）
+ */
+export async function runAction(key, body = {}) {
+  const s = settings();
+  try {
+    if (key === 'status') {
+      const st = await comfyStatus(s.comfyUrl);
+      return {
+        ok: true,
+        comfy: st,
+        comfyDir: s.comfyDir,
+        stopComfyAfterDraw: s.stopComfyAfterDraw,
+        animaUnet: s.animaUnet,
+        presets: presetNames(s)
+      };
+    }
+    if (key === 'startComfy') {
+      const r = await ensureComfy(coreConfig(s), { waitMs: 150000 });
+      return { ok: !!r.ok, ...r };
+    }
+    if (key === 'stopComfy') {
+      const port = Number((String(s.comfyUrl || '').match(/:(\d+)/) || [])[1]) || 8188;
+      const killed = stopComfy(port);
+      return { ok: true, killed };
+    }
+    if (key === 'draw') {
+      const r = await draw({ prompt: body.prompt || '1girl', preset: body.preset, seed: body.seed });
+      return { ok: true, file: r.file, width: r.width, height: r.height, ms: r.ms, preset: r.preset, model: r.model };
+    }
+    return { ok: false, error: '未知动作：' + key };
+  } catch (e) {
+    warn(`动作 ${key} 失败：${String(e?.message ?? e)}`);
+    return { ok: false, error: String(e?.message ?? e) };
+  }
 }
 
 export function activate() {
@@ -551,9 +719,15 @@ export const hooks = {
         // 没打 /画 但一开口就是"画一张…" → 也当指令（私聊尤其需要）
         if (!cmd && s.allowNatural !== false) {
           const imp = parseImplicit(e?.text);
-          if (imp) cmd = { prompt: imp.prompt, preset: '', upscale: 0, seed: 0, pose: '', controlnet: null, help: false };
+          if (imp) cmd = { prompt: imp.prompt, implicit: true, preset: '', upscale: 0, seed: 0, pose: '', controlnet: null, help: false };
         }
         if (!cmd) continue;
+        // 刚画完 90 秒内，只认显式 /画；连夸两句不该又出一张
+        if (cmd.implicit) {
+          const stNow = readState();
+          const lastDraw = Number(stNow.lastDrawAt && stNow.lastDrawAt[chatKey] || 0);
+          if (lastDraw && Date.now() - lastDraw < 90000) continue;
+        }
 
         const sendText = (text) => obSendText(getConfig, chatKey, text).catch((e) => warn(`发文字失败：${e?.message ?? e}`));
 
@@ -562,7 +736,9 @@ export const hooks = {
           return;
         }
 
-        const gate = rateOk(s, chatKey);
+        const pickedForGate = pickPreset(cmd.prompt, normalizePreset(cmd.preset), { ...DEFAULT_PRESETS, ...presetsOf(s) });
+        const kind = String(pickedForGate?.preset?.family || '') === 'anima' ? 'anima' : 'sd';
+        const gate = rateOk(s, chatKey, kind);
         if (!gate.ok) {
           await sendText(gate.why);
           return;
@@ -575,7 +751,7 @@ export const hooks = {
           await sendText('上一张还在画，等它出来再说~');
           return;
         }
-        markUsed(chatKey);
+        markUsed(chatKey, kind);
         inflight.set(chatKey, Date.now());
         cancelComfyStop();
         markSuppress(chatKey);
@@ -598,6 +774,7 @@ export const hooks = {
             log(`已发送画作 → ${chatKey}（${r.preset}, seed ${r.seed}, ${(r.ms / 1000).toFixed(1)}s）`);
             inflight.delete(chatKey);
             scheduleComfyStop(s, chatKey);
+        markDrew(chatKey);
             inflight.delete(chatKey);
           } catch (err) {
             inflight.delete(chatKey);
@@ -644,5 +821,6 @@ export const hooks = {
 
 export const internals = {
   settings, translateToTags, parseCommand, parseImplicit, draw, coreConfig, ackText, helpText, presetNames,
+  rateOk, markUsed, applyOutfitGlossary, normalizePreset,
   pickPreset, stripCompositionTags, comfyStatus, comfyModels, coreInternals
 };
