@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>她的房间 · 3D</title>
+<style>
+  :root{
+    --ink:#4b4250; --muted:#8d8497; --paper:rgba(255,253,248,.86);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;
+    background:
+      radial-gradient(ellipse 78% 66% at 50% 40%,
+        var(--bg1,#3a3346) 0%, var(--bg2,#241f2e) 42%, var(--bg3,#141019) 74%, #0a080f 100%);
+    font-family:"Microsoft YaHei UI","Microsoft YaHei",system-ui,-apple-system,sans-serif;color:var(--ink)}
+  #c{display:block;width:100%;height:100%;outline:none}
+  .vig{position:fixed;inset:0;pointer-events:none;z-index:4;
+    background:radial-gradient(ellipse 74% 68% at 50% 44%,transparent 52%,rgba(24,15,10,.40) 100%)}
+
+  /* 启动占位：模块加载失败（file:// 打开）时一直可见 */
+  #boot{position:fixed;inset:0;display:grid;place-items:center;background:#0e0b12;z-index:50;
+    transition:opacity .6s ease;text-align:center;padding:24px}
+  #boot.gone{opacity:0;pointer-events:none;display:none}
+  #boot .box{color:#cfc6d6;font-size:14px;line-height:2}
+  #boot .spin{width:26px;height:26px;margin:0 auto 18px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.16);border-top-color:#e8b9c8;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #boot code{background:rgba(255,255,255,.08);padding:2px 7px;border-radius:5px;font-size:12px;color:#e8d9a8}
+
+  /* HUD */
+  .hud{position:fixed;left:18px;bottom:16px;display:flex;gap:8px;align-items:center;z-index:10}
+  .chip{background:var(--paper);backdrop-filter:blur(10px);border-radius:99px;padding:8px 13px;
+    font-size:12px;line-height:1;box-shadow:0 4px 18px rgba(30,20,40,.16);white-space:nowrap;
+    border:0;font-family:inherit;color:var(--ink)}
+  .chip b{font-weight:600;color:#3b3444}
+  .btn{cursor:pointer}
+  .btn:hover{background:rgba(255,255,255,.97)}
+  .title{position:fixed;right:20px;top:18px;text-align:right;z-index:10;pointer-events:none}
+  .title h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.5px;color:rgba(255,255,255,.9);
+    text-shadow:0 2px 12px rgba(0,0,0,.5)}
+  .title p{margin:5px 0 0;font-size:11px;color:rgba(255,255,255,.45);letter-spacing:.4px}
+
+  /* 调试面板 */
+  .dbg{position:fixed;right:18px;bottom:16px;z-index:10;display:none;flex-direction:column;gap:6px;
+    background:var(--paper);border-radius:14px;padding:12px;font-size:11px;width:200px}
+  .dbg.on{display:flex}
+  .dbg label{display:flex;align-items:center;gap:8px;color:var(--muted)}
+  .dbg input[type=range]{flex:1;accent-color:#e0a8b8}
+  .dbg select{font:inherit;font-size:11px;padding:3px;border-radius:6px;border:1px solid #e2dbe8;background:#fffdf8}
+
+  /* 指到东西时的小标签 */
+  .tip{position:fixed;transform:translate(16px,-50%);padding:6px 11px;border-radius:9px;
+    background:rgba(38,30,42,.86);color:#f4eef8;font-size:12px;line-height:1;white-space:nowrap;
+    pointer-events:none;z-index:20;opacity:0;transition:opacity .16s ease;backdrop-filter:blur(4px)}
+  .tip.on{opacity:1}
+
+  /* 点开东西时它说的话 */
+  .bubble{position:fixed;transform:translate(-50%,-100%);max-width:250px;
+    background:rgba(255,253,248,.97);border-radius:14px;padding:10px 14px;font-size:12.5px;
+    line-height:1.75;color:#4b4250;box-shadow:0 8px 26px rgba(30,20,40,.24);
+    pointer-events:none;z-index:30;opacity:0;transition:opacity .25s ease;letter-spacing:.2px}
+  .bubble.on{opacity:1}
+  .bubble::after{content:'';position:absolute;left:50%;bottom:-5px;transform:translateX(-50%) rotate(45deg);
+    width:11px;height:11px;background:rgba(255,253,248,.97);border-radius:2px}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="vig"></div>
+<div class="tip" id="tip"></div>
+<div class="bubble" id="bubble"></div>
+
+<div id="boot">
+  <div class="box">
+    <div class="spin"></div>
+    <div id="bootmsg">正在点亮房间…</div>
+    <div id="boothelp" style="display:none;margin-top:14px">
+      如果是直接双击 index.html 打开的，浏览器不允许加载 3D 模块。<br>
+      请改双击 <code>启动房间.cmd</code>。
+    </div>
+  </div>
+</div>
+
+<script>
+  // 出错时把原因显示在页面上，别让人对着一张空白猜
+  window.addEventListener('error', function (e) {
+    var b = document.getElementById('boot'), m = document.getElementById('bootmsg');
+    if (!b || !m) return;
+    b.classList.remove('gone');
+    m.style.color = '#ffb4b4';
+    m.textContent = '出错了：' + (e.message || e.type) + '  ' +
+      (String(e.filename || '').split('/').pop()) + ':' + (e.lineno || '');
+    var sp = b.querySelector('.spin'); if (sp) sp.style.display = 'none';
+  });
+</script>
+
+<div class="title">
+  <h1>她的房间</h1>
+  <p id="subline">— 等距视角 · 实时渲染 —</p>
+</div>
+<div class="hud">
+  <span class="chip" id="chipWhen">--:--</span>
+  <span class="chip" id="chipState"></span>
+  <button class="chip btn" id="btnSound">声音：关</button>
+  <button class="chip btn" id="btnReset">复原摆位</button>
+  <button class="chip btn" id="btnDbg">调</button>
+</div>
+
+<div class="dbg" id="dbg">
+  <label>时刻 <input type="range" id="rHour" min="0" max="24" step="0.1" value="14"><b id="rHourV">14</b></label>
+  <label>天气 <select id="selW">
+    <option value="auto">跟随数据</option>
+    <option value="clear">晴</option>
+    <option value="cloudy">多云</option>
+    <option value="rain">雨</option>
+    <option value="snow">雪</option>
+    <option value="snow">雪</option>
+  </select></label>
+  <label><input type="checkbox" id="cbLamp" checked> 台灯</label>
+  <label><input type="checkbox" id="cbOrbit"> 自由视角</label>
+</div>
+
+<script>
+  // 模块 1.5 秒内没起来，说明是从 file:// 直接开的
+  setTimeout(() => {
+    if (!window.__ROOM_BOOTED__) {
+      var h = document.getElementById('boothelp');
+      if (h) h.style.display = 'block';
+      var m = document.getElementById('bootmsg');
+      if (m) m.textContent = '没能加载 3D 模块';
+    }
+  }, 1500);
+</script>
+<script src="./world-data.js"></script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

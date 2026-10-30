@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>插件市场 · QQ Agent</title>
+<!-- Kondius 统一主题包 + 统一顶栏（意见箱/雷霆语录/Skill 市场/插件市场/人设广场/大肥鱼群/作者的博客？！） -->
+<link rel="stylesheet" href="/assets/theme.css" />
+<script src="/assets/theme.js" defer></script>
+<script src="/assets/qqagent-nav.js" defer></script>
+<style>
+:root{--ink:#17325a;--muted:#6682a5;--bg:#eef3f9;--panel:rgba(255,255,255,.78);--line:rgba(51,133,240,.16);--accent:#3385f0;--accent2:#1658ba;--hot:#ed8e2b;--shadow:0 18px 46px rgba(27,69,122,.12)}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:"Microsoft YaHei","PingFang SC",sans-serif;background:transparent;line-height:1.6}
+html.no-theme body{background:radial-gradient(900px 500px at 7% -10%,#cfe4ff,transparent 68%),radial-gradient(760px 420px at 95% 2%,#ffe6c8,transparent 65%),var(--bg)}
+.wrap{max-width:1180px;margin:auto;padding:0 24px}
+.hero{padding:64px 0 40px;display:grid;grid-template-columns:1.2fr .8fr;gap:30px;align-items:end}
+.eyebrow{display:inline-flex;padding:5px 11px;border-radius:999px;color:var(--accent2);background:#dcecff;font-size:12px;font-weight:700}
+.hero h1{font-size:clamp(36px,5.6vw,66px);line-height:1.06;margin:18px 0 16px;letter-spacing:-.055em}
+.hero p{max-width:650px;color:var(--muted);font-size:17px}
+.manifest{background:#102746;color:#dcecff;border-radius:20px;padding:22px;box-shadow:var(--shadow);transform:rotate(1.5deg)}
+.manifest .line{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.12);padding:8px 0;font-size:13px}
+.manifest .line:last-child{border:0}
+.notice{margin:6px 0 18px;padding:13px 16px;border:1px solid var(--line);background:var(--panel);border-radius:12px;color:var(--muted);font-size:13.5px}
+.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:8px 0 22px}
+.search{border:1px solid var(--line);background:var(--panel);border-radius:11px;padding:11px 14px;min-width:240px;color:var(--ink);font:inherit}
+.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(51,133,240,.13)}
+.upload{margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--accent);color:#fff;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;transition:transform .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn.ghost{background:var(--panel);color:var(--ink)}
+.btn:disabled{opacity:.6;cursor:default;transform:none}
+.categories{display:flex;gap:8px;flex-wrap:wrap}
+.cat{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:8px 13px;color:var(--muted);cursor:pointer;font-size:13px;font-family:inherit}
+.cat.active,.cat:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px;padding-bottom:70px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;transition:transform .18s,border-color .18s}
+.card:hover{transform:translateY(-3px);border-color:var(--accent)}
+.cardtop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.badge{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--accent2);background:rgba(22,88,186,.06)}
+.card h2{margin:2px 0 0;font-size:17px}
+.card p{margin:0;color:var(--muted);font-size:13.5px;flex:1}
+.meta{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12.5px;font-family:ui-monospace,monospace}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:56px 0;font-size:14px}
+.toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:#102746;color:#fff;padding:11px 20px;border-radius:11px;font-size:14px;display:none;z-index:2147482001;box-shadow:0 14px 40px rgba(16,39,70,.35)}
+.modal{position:fixed;inset:0;z-index:2147482000;display:none;align-items:center;justify-content:center;background:rgba(15,30,55,.42);backdrop-filter:blur(7px)}
+.modal.open{display:flex}
+.modal .box{background:#fff;border-radius:18px;padding:26px 26px 22px;width:min(92vw,430px);box-shadow:0 26px 70px rgba(20,50,100,.3);animation:mIn .26s cubic-bezier(.2,.8,.3,1)}
+@keyframes mIn{from{transform:scale(.94) translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.modal h3{margin:0 0 6px;font-size:19px}
+.modal .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.modal .fld{display:block;margin-bottom:14px}
+.modal .fld span{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.modal .fld input{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;color:var(--ink);background:#fbfdff}
+.modal .fld input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(51,133,240,.13)}
+.modal .ferr{color:#d64545;font-size:12.5px;min-height:17px;margin-bottom:6px}
+.modal .mact{display:flex;gap:10px;justify-content:flex-end}
+.modal .mact .btn.ghost{background:var(--panel)}
+/* 账号系统 */
+.authbox{font-size:13px}
+.authbox .who{color:var(--accent2);font-weight:700}
+/* 顶部让出统一导航（sticky ~64px）的高度 */
+.qa-authbar{display:flex;justify-content:flex-end;gap:9px;align-items:center;padding:76px 0 0}
+.pill{border:1px solid var(--line);background:var(--panel);color:var(--ink);text-decoration:none;border-radius:999px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+.pill:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.actions .code-btn{background:var(--hot);border-color:var(--hot);color:#fff}
+.actions .code-btn:hover{background:#d07a1f}
+.linklike{color:var(--accent2);cursor:pointer;text-decoration:underline;font-size:12.5px}
+@media(max-width:900px){.hero{grid-template-columns:1fr}.manifest{transform:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<div class="qa-authbar authbox" id="authbox"></div>
+<section class="hero">
+  <div>
+    <span class="eyebrow">程序级扩展 · 独立市场</span>
+    <h1>给机器人<br><span style="color:var(--accent)">接上新的零件。</span></h1>
+    <p>插件是与 Skill 相互独立的扩展类型：围绕进程与运行时做更底层的增强。下载后放入本地 <code>plugins/</code> 目录；也可以把自己的插件包上传到社区。</p>
+  </div>
+  <div class="manifest">
+    <div class="line"><span>manifest</span><b>plugin.json</b></div>
+    <div class="line"><span>runtime</span><b>local-first</b></div>
+    <div class="line"><span>security</span><b>review before enable</b></div>
+    <div class="line"><span>type</span><b>plugin</b></div>
+  </div>
+</section>
+
+<div class="notice">安全提醒：插件会在你的机器人进程内运行。所有社区上传的插件都会先经人工审核；上传前也请自行检查入口代码、网络权限与外部依赖，不要把 API Key、Cookie 或模型文件打进压缩包。</div>
+
+<section class="toolbar">
+  <input class="search" id="search" placeholder="搜索插件名称或描述…" />
+  <div class="categories" id="categories"></div>
+  <button class="btn upload" id="uploadBtn" type="button">上传插件 ZIP</button>
+</section>
+
+<section class="grid" id="grid"><div class="empty">正在加载插件市场…</div></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="upModal">
+  <div class="box">
+    <h3>上传插件包</h3>
+    <div class="sub">登录账号后上传；上传后进入人工审核，通过后生成安装口令。</div>
+    <label class="fld"><span>插件压缩包（≤8MB，需含 plugin.json）</span><input id="upFile" type="file" accept=".zip,application/zip" /></label>
+    <div class="ferr" id="upErr"></div>
+    <div class="mact"><button class="btn ghost" id="upCancel" type="button">取消</button><button class="btn" id="upSubmit" type="button">提交上传</button></div>
+  </div>
+</div>
+
+<div class="modal" id="authModal">
+  <div class="box">
+    <h3 id="amTitle">登录 QQ Agent 账号</h3>
+    <label class="fld"><span>登录 ID</span><input id="amLoginId" autocomplete="username" placeholder="3~24 位，字母/数字/下划线" /></label>
+    <label class="fld" id="amDispRow" style="display:none"><span>展示用户名（市场里显示的名字）</span><input id="amDisplayName" maxlength="24" placeholder="如：小小机器人" /></label>
+    <label class="fld"><span id="amPassLabel">密码</span><input id="amPassword" type="password" autocomplete="current-password" /></label>
+    <label class="fld" id="amPass2Row" style="display:none"><span>确认密码</span><input id="amPassword2" type="password" autocomplete="new-password" /></label>
+    <div class="ferr" id="amErr"></div>
+    <div style="margin:2px 0 8px"><span class="linklike" id="amSwitch">没有账号？在这里注册</span></div>
+    <div class="mact"><button class="btn ghost" id="amCancel" type="button">取消</button><button class="btn" id="amGo" type="button">确认登录</button></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/community';
+let items = [], cat = 'all', me = null;
+const $ = s => document.querySelector(s);
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2600);}
+
+/* ── 账号系统 ── */
+const TOKEN_KEY='qqa-market-token';
+function savedToken(){return localStorage.getItem(TOKEN_KEY)||''}
+async function refreshMe(){
+  const t=savedToken();me=null;
+  if(t){try{const d=await fetch(API+'/auth/whoami',{headers:{'X-Account-Token':t}}).then(r=>r.json());if(d.ok)me=d.account}catch(e){}}
+  renderAuth();
+}
+function renderAuth(){
+  const box=$('#authbox');
+  if(!box)return;
+  box.innerHTML=me
+    ?`<span>👤 <span class="who">${esc(me.displayName||me.username||me.loginId)}</span></span><button class="pill" id="logout-btn">登出</button>`
+    :`<button class="pill" id="login-btn">登录 / 注册</button>`;
+  const lb=$('#login-btn');if(lb)lb.onclick=()=>openAuthModal('login');
+  const ob=$('#logout-btn');if(ob)ob.onclick=()=>{localStorage.removeItem(TOKEN_KEY);me=null;renderAuth();toast('已登出')};
+}
+let authMode='login';
+function openAuthModal(mode){
+  authMode=mode;const m=$('#authModal');const isLogin=mode==='login';
+  $('#amTitle').textContent=isLogin?'登录 QQ Agent 账号':'注册 QQ Agent 账号';
+  $('#amDispRow').style.display=isLogin?'none':'';
+  $('#amPass2Row').style.display=isLogin?'none':'';
+  $('#amPassLabel').textContent=isLogin?'密码':'设置密码（6~72 位）';
+  $('#amSwitch').textContent=isLogin?'没有账号？在这里注册':'已有账号？在这里登录';
+  $('#amGo').textContent=isLogin?'确认登录':'确认注册';
+  $('#amErr').textContent='';$('#amPassword').value='';$('#amPassword2').value='';
+  m.classList.add('open');setTimeout(()=>$('#amLoginId').focus(),60);
+}
+$('#amSwitch').onclick=()=>openAuthModal(authMode==='login'?'register':'login');
+$('#amCancel').onclick=()=>$('#authModal').classList.remove('open');
+$('#authModal').onclick=e=>{if(e.target===$('#authModal'))$('#authModal').classList.remove('open')};
+async function doAuth(){
+  const loginId=$('#amLoginId').value.trim(),password=$('#amPassword').value;
+  const displayName=$('#amDisplayName').value.trim(),password2=$('#amPassword2').value;
+  const err=$('#amErr');err.textContent='';
+  if(!loginId||!password){err.textContent='登录 ID 和密码都要填';return}
+  if(authMode==='register'){
+    if(!displayName){err.textContent='展示用户名不能为空';return}
+    if(password!==password2){err.textContent='两次输入的密码不一致';return}
+  }
+  const btn=$('#amGo');btn.disabled=true;btn.textContent='处理中…';
+  try{
+    const body=authMode==='login'?{loginId,password}:{loginId,displayName,password};
+    const r=await fetch(API+(authMode==='login'?'/auth/login':'/auth/register'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
+    if(!r.ok)throw Error(r.error||'失败');
+    localStorage.setItem(TOKEN_KEY,r.token);me=r.account;renderAuth();
+    $('#authModal').classList.remove('open');
+    toast((authMode==='login'?'登录成功，欢迎 ':'注册成功，欢迎 ')+(r.account.displayName||r.account.username));
+  }catch(e){err.textContent=e.message}
+  finally{btn.disabled=false;btn.textContent=authMode==='login'?'确认登录':'确认注册'}
+}
+$('#amGo').onclick=doAuth;
+$('#amPassword').addEventListener('keydown',e=>{if(e.key==='Enter'&&authMode==='login')doAuth()});
+$('#amPassword2').addEventListener('keydown',e=>{if(e.key==='Enter')doAuth()});
+
+function render(){
+  const q = $('#search').value.trim().toLowerCase();
+  const list = items.filter(x => (cat==='all'||x.category===cat) && (!q || `${x.name} ${x.description} ${x.id}`.toLowerCase().includes(q)));
+  $('#grid').innerHTML = list.length ? list.map(x => `
+    <article class="card">
+      <div class="cardtop"><span class="badge">${esc(x.categoryName||x.category||'其他')}</span><span class="meta">v${esc(x.version||'0.0.0')}</span></div>
+      <h2>${esc(x.name||x.id)}</h2>
+      <p>${esc(x.description||'暂无描述')}</p>
+      <div class="meta"><span>${esc(x.author||'未声明作者')}</span><span>${esc(x.id)}</span></div>
+      <div class="actions">${x.downloadUrl?`<a class="btn" href="${esc(x.downloadUrl)}">下载 ZIP</a>`:''}${x.installCode?`<button class="btn code-btn" data-code="${esc(x.installCode)}">复制口令！</button>`:'<span class="meta" style="font-size:12px">待审核通过后开放下载</span>'}</div>
+    </article>`).join('') : '<div class="empty">没有匹配的插件</div>';
+  document.querySelectorAll('[data-code]').forEach(b => b.onclick = async () => {
+    await navigator.clipboard?.writeText(b.dataset.code || '');
+    toast('口令已复制：'+b.dataset.code+' —— 到 QQ Agent 的「添加插件」里粘贴');
+  });
+}
+
+async function load(){
+  try{
+    const d = await fetch(API + '/plugins').then(r => r.json());
+    items = (d.items||[]).map(x => ({...x, categoryName: (d.categories||{})[x.category] || x.category}));
+    const cats = [['all','全部'], ...Object.entries(d.categories||{})];
+    $('#categories').innerHTML = cats.map(([k,v]) => `<button class="cat ${k===cat?'active':''}" data-cat="${esc(k)}">${esc(v)}</button>`).join('');
+    document.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => {
+      cat = b.dataset.cat;
+      document.querySelectorAll('.cat').forEach(x => x.classList.toggle('active', x===b));
+      render();
+    });
+    render();
+  }catch(e){ $('#grid').innerHTML = '<div class="empty">市场暂时无法连接，请稍后重试。</div>'; }
+}
+
+// 上传：未登录先弹登录；已登录选文件传账号发布
+const upModal = $('#upModal');
+function openUp(){
+  if(!savedToken()){openAuthModal('login');toast('上传前请先登录账号');return}
+  $('#upErr').textContent=''; upModal.classList.add('open');
+}
+function closeUp(){ upModal.classList.remove('open'); }
+$('#uploadBtn').onclick = openUp;
+$('#upCancel').onclick = closeUp;
+upModal.onclick = e => { if(e.target===upModal) closeUp(); };
+document.addEventListener('keydown', e => { if(e.key==='Escape' && upModal.classList.contains('open')) closeUp(); });
+
+$('#upSubmit').onclick = async () => {
+  const f = $('#upFile').files[0], errEl = $('#upErr');
+  errEl.textContent = '';
+  if(!f){ errEl.textContent='请选择插件压缩包'; return; }
+  if(f.size > 8*1024*1024){ errEl.textContent='压缩包最大 8MB'; return; }
+  const btn = $('#upSubmit'), old = btn.textContent;
+  btn.disabled = true; btn.textContent = '上传中…';
+  const fd = new FormData();
+  fd.append('kind', 'plugins'); fd.append('file', f);
+  try{
+    const r = await fetch(API + '/market/publish', {method:'POST', headers:{'X-Account-Token':savedToken()}, body:fd}).then(x=>x.json());
+    if(!r.ok) throw Error(r.error || '上传失败');
+    toast('已提交，审核通过后生成安装口令');
+    closeUp(); $('#upFile').value=''; await load();
+  }catch(e){ errEl.textContent = e.message || '上传失败'; }
+  finally{ btn.disabled = false; btn.textContent = old; }
+};
+
+$('#search').oninput = render;
+refreshMe(); load();
+addEventListener('load',()=>{if(!document.getElementById('th-flow-bg')&&!document.getElementById('th-canvas'))document.documentElement.classList.add('no-theme')});
+</script>
+</body>
+</html>
